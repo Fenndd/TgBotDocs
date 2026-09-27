@@ -148,3 +148,11 @@ def test_allowed_values_are_explicit_and_review_bound():
     assert make_case(values=(value,)).expected.fields[0].allowed_values == ("B",)
     with pytest.raises(ValidationError, match="allowed_value"):
         ExpectedValue(field_id="code", status="extracted", present=True, value="A", allowed_values=(True,), source_pages=(1,))
+
+
+def test_reference_review_aid_is_allowed_but_never_an_input():
+    sheet = Artifact(id="sheet", path="case-1-review.png", sha256=HASH, kind="reference")
+    case = make_case(artifacts=(Artifact(id="input", path="case-1.png", sha256=HASH, kind="image_file"), sheet))
+    assert case.input_artifact_ids == ("input",)
+    with pytest.raises(ValidationError, match="primary_delivery_kind_mismatch"):
+        make_case(artifacts=(sheet,), input_artifact_ids=("sheet",))

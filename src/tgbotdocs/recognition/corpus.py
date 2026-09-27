@@ -40,7 +40,8 @@ class Artifact(ContractModel):
     id: StrictStr = Field(min_length=1)
     path: StrictStr = Field(min_length=1)
     sha256: SHA256
-    kind: Literal["original", "image_file", "photo", "pdf", "pdf_render"]
+    # "reference" marks review aids such as contact sheets; never a model input.
+    kind: Literal["original", "image_file", "photo", "pdf", "pdf_render", "reference"]
     delivery_simulated: StrictBool = False
     physical_capture: StrictBool = False
     telegram_delivery_verified: StrictBool = False
