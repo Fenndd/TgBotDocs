@@ -6,7 +6,7 @@ from decimal import Decimal
 import re
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, model_validator
 
 ScalarType = Literal["text", "date", "number", "boolean"]
 FieldStatus = Literal["extracted", "missing", "unreadable", "ambiguous", "invalid"]

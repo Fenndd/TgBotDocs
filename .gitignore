@@ -14,5 +14,11 @@ Desktop.ini
 
 # Isolated exploratory T01 environment; models and measurements live outside Git.
 .venv-t01a/
+.venv/
 __pycache__/
 .pytest_cache/
+.ruff_cache/
+.hypothesis/
+*.egg-info/
+build/
+dist/

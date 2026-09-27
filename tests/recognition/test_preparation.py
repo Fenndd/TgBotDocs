@@ -1,7 +1,6 @@
 """Real parser/render checks and kill-before-cleanup lifecycle checks (no GPU)."""
 import asyncio
 from dataclasses import FrozenInstanceError, replace
-import json
 from pathlib import Path
 import sys
 import struct
@@ -275,7 +274,7 @@ def test_cancellation_kills_and_waits_worker_before_partial_cleanup(tmp_path, sc
                 pytest.fail()
         task = asyncio.create_task(render())
         async with asyncio.timeout(10):
-            while not marker.exists():
+            while not marker.exists():  # noqa: ASYNC110 - observe a marker from a separate OS process
                 await asyncio.sleep(0.01)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):

@@ -1,0 +1,1 @@
+"""Local document-processing application."""
