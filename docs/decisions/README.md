@@ -1,18 +1,13 @@
 # Significant Decisions Log
 
-This is where ADRs (Architecture Decision Records) are kept: short records of significant technical decisions and their rationale. No decisions about the product architecture have been made yet.
+Basis date: 2026-09-27. Accepted decisions are linked to the developer's direct answers in [SOURCES](../requirements/SOURCES.md).
 
-Create a record when there is a real choice with noticeable consequences. A routine edit or every agent action does not require a separate ADR. The rationale for the initial documentation structure is in [SETUP_NOTES.md](../engineering/SETUP_NOTES.md).
+| ADR | Status | Subject |
+| --- | --- | --- |
+| [ADR-0001](ADR-0001-local-processing.md) | Accepted | Processing on the developer's PC; customer's server at a later stage |
+| [ADR-0002](ADR-0002-application-stack.md) | Accepted | Python/aiogram/PostgreSQL, standard Bot API, long polling, and a single instance |
+| [ADR-0003](ADR-0003-direct-local-vlm.md) | Accepted with mandatory experiment | Direct Qwen3-VL-4B Q4_K_M / llama.cpp and a condition for reconsideration |
 
-Names for future records: `ADR-0001-short-name.md`, then the next available number. Do not mark a proposed decision as accepted without grounds.
+Main product decisions that do not require a separate ADR are recorded in the [decision register](../requirements/OPEN_QUESTIONS.md).
 
-## Record Contents
-
-- Title, date, and status: proposed / accepted / rejected / superseded.
-- Context and links to requirements or another verifiable basis.
-- Options considered and significant constraints.
-- Decision, its rationale, and who made it or as part of which task it was made.
-- Consequences, trade-offs, and required checks.
-- Link to the superseding decision, if the choice later changes.
-
-When revisiting an accepted decision, preserve the previous record and link it to the new one. Describe the current system in [ARCHITECTURE.md](../architecture/ARCHITECTURE.md), without duplicating the entire discussion log there.
+The accepted architecture does not mean that the product has been implemented or that model quality has been proven. When reconsidering a choice, preserve the rationale for the previous choice and its status, and link to the superseding record. The current system is described in [ARCHITECTURE](../architecture/ARCHITECTURE.md).

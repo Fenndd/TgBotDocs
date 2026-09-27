@@ -2,7 +2,7 @@
 
 ## General Rules
 
-- Communicate and write documentation in Russian unless the task requires another language.
+- Write documentation in English unless the task requires another language.
 - Do not infer the product's purpose from the folder name, examples, or other AI responses. Use the provided materials and confirmed decisions.
 - Do not present drafts and assumptions as requirements. Do not change the meaning of the original specification; record clarifications separately.
 - Check the current state of files and Git before making changes. Preserve other people's unfinished work.

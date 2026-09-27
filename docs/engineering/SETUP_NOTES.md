@@ -13,9 +13,9 @@ Prepared 2026-09-27. The analysis is based on all five message exchanges in the 
 
 ## What Was Left Blank
 
-`ORIGINAL_BRIEF.md` intentionally has zero size: the source text has not yet been provided for inclusion. Explanations about it are in `README.md` so as not to mix the original with editorial text.
+During the initial preparation, the original task had not yet been provided, and the product documents were templates. This is a historical state, not the current status.
 
-The requirements, architecture, security, and testing documents contain only their purpose and status. They do not predefine behavior, technologies, components, threats, or test commands. Detailed specifications and ADRs will be added when there are actual tasks and decisions.
+On 2026-09-27, the user provided the external `TT.txt` and the pinned discussion. At the user's direct instruction, the empty file for a copy of the source was removed; the task text is not transferred into the repository. Links and the rationale are in [SOURCES.md](../requirements/SOURCES.md), and the current stage is in [STATUS.md](../../STATUS.md). Requirements, architecture, security, and verification are now being clarified together with the developer.
 
 ## What Was Deferred
 

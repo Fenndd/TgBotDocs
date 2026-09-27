@@ -1,36 +1,32 @@
-# Project Preparation
+# Telegram Bot for Extracting Data from Documents
 
-The repository is in the preparation phase. Information about the product and the original specification has not been added. The stack, architecture, and source-code structure have not been defined.
+Stage: planning is complete; the next step is implementation of T01. The bot receives documents in Telegram and returns only the data requested in the user's personal text settings. The first version accepts arbitrary documents in any languages, with an honest refusal when they cannot be read; processing is local. The completed product is intended to be delivered to the customer.
 
-## Entry Points
+The selected stack is Python + aiogram + PostgreSQL and a direct local Qwen3-VL-4B-Instruct Q4_K_M through llama.cpp. The next task is [T01: testing recognition on the current PC](specs/T01-recognition-baseline.md). No source code, dependencies, or infrastructure are being created in this session; model quality has not yet been tested.
 
-| File | Purpose |
+## Navigation
+
+| Document | Purpose |
 | --- | --- |
-| [STATUS.md](STATUS.md) | Current state, check results, and next step |
-| [PLAN.md](PLAN.md) | Preparation sequence; later, the implementation plan |
-| [AGENTS.md](AGENTS.md) | General AI instructions and pointers to relevant context |
-| [CLAUDE.md](CLAUDE.md), [GEMINI.md](GEMINI.md) | Connect the shared instructions to other tools |
-| [DEVELOPMENT_WORKFLOW.md](docs/engineering/DEVELOPMENT_WORKFLOW.md) | Workflow, checks, reporting, and context handoff |
-| [AI_ORCHESTRATION.md](docs/engineering/AI_ORCHESTRATION.md) | When to delegate and how to choose a subagent model |
-| [SETUP_NOTES.md](docs/engineering/SETUP_NOTES.md) | Rationale for the initial structure and deferred settings |
+| [STATUS.md](STATUS.md) | Current state, checks, and next step |
+| [PLAN.md](PLAN.md) | Sequence of alignments and criterion for completing planning |
+| [Requirements](docs/requirements/PRODUCT_SPEC.md) | Requirements, sources, and draft acceptance criteria |
+| [Sources](docs/requirements/SOURCES.md) | Requirement provenance and boundaries of available context |
+| [Open Questions](docs/requirements/OPEN_QUESTIONS.md) | Options, recommendations, and user decisions |
+| [Architecture](docs/architecture/ARCHITECTURE.md) | Agreed boundaries, components, and technical decisions |
+| [Contracts](docs/architecture/CONTRACTS.md), [data](docs/architecture/DATA_MODEL.md) | Profiles, pages, fields/lists, states, persistent and temporary data |
+| [Decisions](docs/decisions/README.md) | ADRs: rationale, options, and consequences |
+| [Security](docs/security/SECURITY.md) | Data processing and storage boundaries |
+| [Verification](docs/testing/TEST_STRATEGY.md) | Acceptance scenarios and quality checks |
+| [Acceptance criteria](docs/testing/ACCEPTANCE_PLAN.md), [operations](docs/operations/OPERATIONS.md) | Test set, measurements, queue, timers, and cleanup |
+| [Roadmap](docs/planning/ROADMAP.md) | Stages and dependencies |
+| [Task specifications](specs/README.md) | Individual tasks for subsequent development |
 
-## Documentation
+## Working in the Repository
 
-| Location | What to store here |
-| --- | --- |
-| [ORIGINAL_BRIEF.md](docs/requirements/ORIGINAL_BRIEF.md) | Original specification without paraphrasing or editorial additions; the file is currently empty |
-| [PRODUCT_SPEC.md](docs/requirements/PRODUCT_SPEC.md) | Verified requirements and acceptance criteria |
-| [OPEN_QUESTIONS.md](docs/requirements/OPEN_QUESTIONS.md) | Questions and assumptions requiring a decision |
-| [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) | Architecture description after it is defined |
-| [docs/decisions/](docs/decisions/README.md) | Significant decisions: options, rationale, and consequences |
-| [SECURITY.md](docs/security/SECURITY.md) | Product security requirements after specification analysis |
-| [TEST_STRATEGY.md](docs/testing/TEST_STRATEGY.md) | Product verification strategy after requirements are defined |
-| [specs/](specs/README.md) | Specifications for individual tasks as needed |
+- [AGENTS.md](AGENTS.md) contains the general rules; [CLAUDE.md](CLAUDE.md) and [GEMINI.md](GEMINI.md) connect them to the corresponding tools.
+- [Workflow](docs/engineering/DEVELOPMENT_WORKFLOW.md) covers task execution, verification, and handoff.
+- [Delegation](docs/engineering/AI_ORCHESTRATION.md) covers subtask selection and subagent parameters.
+- [Preparation history](docs/engineering/SETUP_NOTES.md) explains the rationale for the initial structure.
 
-Short templates indicate places for future information, not accepted decisions. Documentation is expanded based on facts; unknowns are not filled in with guesses.
-
-## Getting Started
-
-The first substantive step is to obtain the original specification and save it to `docs/requirements/ORIGINAL_BRIEF.md`. If the original is provided in another format, preserve the source file alongside it and list it in this documentation map. Then analyze the requirements according to the [plan](PLAN.md).
-
-There are no installation, run, build, or test commands yet. Add them after choosing the stack and verifying the environment.
+Documentation is maintained in English. There are no application install, build, or test commands yet. The original idea remains in the provided file outside the repository; a full copy is not transferred into the project.
