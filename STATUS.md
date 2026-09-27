@@ -6,6 +6,12 @@ Updated: 2026-09-28.
 
 **T01b is blocked on the developer's human review; everything automatable before it is done.** The recognition core, calibration runner with policy replay, freeze step, tuning-set canonicalization, human-review form and apply tools, and the T01c benchmark generator/ingest/seal tooling are implemented, independently reviewed, and committed on `main`. Nothing is calibrated or frozen; no benchmark ran. T02 is prohibited until T01c passes. The exact procedure and commands are in [T01_PROCEDURE](docs/testing/T01_PROCEDURE.md).
 
+## Stop Point (2026-09-28, usage limit)
+
+- Done: the developer (Nikita) reviewed the tuning set at 01:41; `review-apply` wrote `C:\Users\nikit\TgBotDocsData\corpora\t01b-tuning-review-v3\reviewed-manifest.json` (sha256 `022fd0b2…`): 22 verified, tune-17/tune-22/tune-23 rejected and excluded, no calibration eligibility blockers.
+- In progress when the session stopped: `runner run --mode calibration` on that manifest, writing `C:\Users\nikit\TgBotDocsData\dev\measurements\t01b-calibration.json`. If the file is missing or the run failed, rerun that command (T01_PROCEDURE stage 3).
+- Next assistant step: `runner freeze --auto --calibration <that report> --output C:\Users\nikit\TgBotDocsData\dev\frozen\frozen-t01b.json`, then write the calibration report in `docs/testing/`. Next developer step: benchmark captures (item 3 below).
+
 ## Next Steps (in order)
 
 1. **Developer:** review the 25 tuning cases in `C:\Users\nikit\TgBotDocsData\corpora\t01b-tuning-review-v3\review-form.html`, export `review-decisions.json`, then run `corpus_cli review-apply` (T01_PROCEDURE stage 2). The form binds to canonical manifest sha256 `be479b77…`; regenerate the form if the manifest is ever regenerated.
