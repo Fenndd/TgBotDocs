@@ -6,19 +6,19 @@ Status: tooling implemented and tested on 2026-09-28; the human steps below have
 
 | Item | Path |
 | --- | --- |
-| Data root: models, pinned runtime, measurements, scratch, benchmark ledger | `C:\Users\nikit\AppData\Local\TgBotDocsDev` |
-| Tuning package (25 cases) with `canonical-manifest.json` and `review-form.html` | `C:\Users\nikit\AppData\Local\TgBotDocs\t01b-tuning-review-v3` |
+| Data root: models, pinned runtime, measurements, scratch, benchmark ledger | `C:\Users\nikit\TgBotDocsData\dev` |
+| Tuning package (25 cases) with `canonical-manifest.json` and `review-form.html` | `C:\Users\nikit\TgBotDocsData\corpora\t01b-tuning-review-v3` |
 | Environment | `python -m uv sync --locked` in the checkout; commands below use `.venv\Scripts\python.exe` |
 
-The data root must stay on one path per PC: the benchmark ledger that enforces one run per frozen configuration lives in it. Never place real user documents in these directories.
+Keep all data outside `%LOCALAPPDATA%`: the Codex and Claude desktop apps silently redirect writes there into their own package folders, which other programs, including the browser, cannot see. The data root must stay on one path per PC: the benchmark ledger that enforces one run per frozen configuration lives in it. Never place real user documents in these directories.
 
 ## Stage 1 — Diagnostics (allowed now, not a quality result)
 
 ```powershell
 .venv\Scripts\python.exe -m tgbotdocs.recognition.runner run --mode diagnostics `
-  --manifest C:\Users\nikit\AppData\Local\TgBotDocs\t01b-tuning-review-v3\canonical-manifest.json `
-  --data-root C:\Users\nikit\AppData\Local\TgBotDocsDev `
-  --output C:\Users\nikit\AppData\Local\TgBotDocsDev\measurements\<name>.json [--show-mismatches]
+  --manifest C:\Users\nikit\TgBotDocsData\corpora\t01b-tuning-review-v3\canonical-manifest.json `
+  --data-root C:\Users\nikit\TgBotDocsData\dev `
+  --output C:\Users\nikit\TgBotDocsData\dev\measurements\<name>.json [--show-mismatches]
 ```
 
 The runner collects one policy-independent trace per case (V2 alternate readings included unless `--no-alternate`), replays the production decision for every calibration point, and writes a content-free report: per-point aggregate and group metrics, per-signal curves, per-case timings and calls, sampled resource peaks, and failures by code. `--show-mismatches` prints value comparisons for synthetic development/tuning cases to stderr only. Diagnostics are refused on the benchmark split. Prompt and parameter development may use these reports; they never count as calibration.
