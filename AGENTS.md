@@ -32,7 +32,11 @@ Do not read all documentation automatically. Choose the relevant sources:
 
 ## Subagents
 
-Delegate when it noticeably helps with independent verification, context separation, or parallel work. Read the orchestration policy before starting. Choose the model and effort for the task rather than automatically inheriting the main session's settings. Do not create fixed role profiles in advance. The current tool and session limitations take precedence.
+Delegate when it noticeably helps with independent verification, context separation, or parallel work. Read the orchestration policy before starting; in Codex and Claude Code, use the project-local `model-routing` skill for substantial delegation. Choose model and effort by reasoning difficulty, context and output volume, and risk; request compact findings or direct file changes with verifiable checks. Do not create fixed role profiles in advance. The current tool and session limitations take precedence.
+
+## Project Skills
+
+Canonical project skills live in `.agents/skills/`. For each one, keep a thin Claude Code entrypoint in `.claude/skills/<name>/SKILL.md` with the same `name` and `description` that points to the canonical file. Create new project skills the same way.
 
 ## Action Boundaries
 
