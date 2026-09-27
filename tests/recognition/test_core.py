@@ -526,3 +526,14 @@ async def test_alternate_failure_is_recorded_and_fails_only_an_enforcing_job(tmp
             matching_margin=0.1, compute_alternate_view=True)).recognize(files, (profile,), scratch=scratch,
                                                                         selected_profile=profile)
     assert not list(scratch.iterdir())
+
+
+def test_matching_describes_the_document_before_choosing_and_sees_field_labels(profile):
+    from tgbotdocs.recognition import prompts
+
+    schema = prompts.matching_schema(2)
+    # Generation follows key order: the description grounds the status and index.
+    assert list(schema["properties"]) == ["type_description", "status", "profile_index"]
+    assert schema["properties"]["type_description"] == {"type": "string"}
+    text = prompts.matching_text((profile,), (1,))
+    assert '"fields":["Identifier"]' in text and "private-stored-id" not in text and "private-owner" not in text
