@@ -92,14 +92,44 @@ def _matches(result: FieldResult, truth: ExpectedValue | None, field: ScalarFiel
 
 
 def _row_score(row: ListRow, truth_row, columns: dict[str, ScalarField], case: CorpusCase, context: bool) -> tuple[int, int, int]:
-    """(exactly matching accepted cells, agreeing missing cells, 1) for one admissible pair, else zeros."""
+    """(exactly matching accepted cells, agreeing missing cells, 1) for one admissible pair, else zeros.
+
+    A row with any accepted cell is admissible only through an exactly correct cell;
+    agreeing ``missing`` cells then only break ties. A row without accepted cells is
+    admissible through agreeing ``missing`` cells.
+    """
     if not context or not set(row.source_pages).issubset(truth_row.source_pages):
         return 0, 0, 0
     cells = {cell.field_id: cell for cell in truth_row.cells}
     correct = sum(_matches(cell, cells.get(cell.field_id), columns.get(cell.field_id), case, True) for cell in row.cells)
     missing = sum(cell.status == "missing" and cell.field_id in cells and cells[cell.field_id].status == "missing"
                   for cell in row.cells)
-    return (correct, missing, 1) if correct or missing else (0, 0, 0)
+    accepted = any(cell.status == "extracted" for cell in row.cells)
+    return (correct, missing, 1) if correct or (missing and not accepted) else (0, 0, 0)
+
+
+def _blank_row_pairs(result: ListResult, expected: ExpectedList | None, pairs: tuple[int | None, ...]) -> dict[int, int]:
+    """Positional pairing, used only for ``false_missing_values``, of unmatched rows that
+    carry no accepted cell to unmatched expected rows within the same alignment gap.
+
+    Such rows cannot be aligned by content, so without this their absence claims for
+    present values would go uncounted. It never changes accuracy or structure counts.
+    """
+    if expected is None:
+        return {}
+    found: dict[int, int] = {}
+    gap_actual: list[int] = []
+    previous = -1
+    for i, index in enumerate((*pairs, len(expected.rows))):
+        if i < len(pairs) and index is None:
+            if not any(cell.status == "extracted" for cell in result.rows[i].cells):
+                gap_actual.append(i)
+            continue
+        for a, e in zip(gap_actual, range(previous + 1, index), strict=False):
+            if set(result.rows[a].source_pages).issubset(expected.rows[e].source_pages):
+                found[a] = e
+        gap_actual, previous = [], index
+    return found
 
 
 def _align_rows(result: ListResult, expected: ExpectedList | None, columns: dict[str, ScalarField],
@@ -108,8 +138,9 @@ def _align_rows(result: ListResult, expected: ExpectedList | None, columns: dict
 
     Actual ``source_key`` values are batch-derived and never used. The dynamic program
     maximizes, lexicographically, exactly matching accepted cells, then agreeing
-    ``missing`` cells, then paired rows; a pair needs at least one of the first two, so a
-    row whose every accepted cell is wrong stays unmatched (an extra row). Ties prefer
+    ``missing`` cells, then paired rows. A row with accepted cells needs an exactly
+    correct cell to pair, so a row whose every accepted cell is wrong stays unmatched
+    (an extra row) whether or not it also has blank columns. Ties prefer
     pairing, then skipping the actual row. Returns the expected index per actual row.
     """
     actual = result.rows
@@ -176,6 +207,8 @@ def _case_counts(case: CorpusCase, observation: CaseObservation | None) -> Count
     credited = set()
 
     def value(result, expected, field, identity, kind, valid_context):
+        # Scalars in the correct profile context and cells of content-aligned rows; blank
+        # unaligned rows are counted through ``_blank_row_pairs`` in the list loop.
         if valid_context and result.status == "missing" and expected is not None and expected.present is True:
             counts["false_missing_values"] += 1  # A present value was reported absent.
         if result.status != "extracted":
@@ -214,9 +247,15 @@ def _case_counts(case: CorpusCase, observation: CaseObservation | None) -> Count
             counts["list_structure_errors"] += 1
         if expected and not expected.rows and expected.status == "complete" and result.status == "complete" and not result.rows and context:
             counts["confirmed_empty_lists"] += 1
-        for row, index in zip(result.rows, pairs, strict=True):
+        blank = _blank_row_pairs(result, expected, pairs) if context else {}
+        for position, (row, index) in enumerate(zip(result.rows, pairs, strict=True)):
             if set(columns) != {cell.field_id for cell in row.cells}:
                 counts["schema_errors"] += 1
+            if index is None and position in blank:
+                # No accepted cells: only reported absence of present values is counted.
+                blank_truth = {cell.field_id: cell for cell in expected.rows[blank[position]].cells}
+                counts["false_missing_values"] += sum(cell.status == "missing" and cell.field_id in blank_truth
+                                                      and blank_truth[cell.field_id].present is True for cell in row.cells)
             truth_row = expected.rows[index] if index is not None else None
             cells = {cell.field_id: cell for cell in truth_row.cells} if truth_row else {}
             for cell in row.cells:

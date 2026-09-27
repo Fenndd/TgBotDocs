@@ -210,6 +210,25 @@ def test_agreeing_missing_cells_associate_rows_for_list_completeness():
     assert counts["correct_accepted_values"] == 2 and counts["list_structure_errors"] == counts["false_missing_values"] == 0
 
 
+def test_hallucinated_row_with_a_blank_column_is_an_extra_row_like_one_without():
+    blank = list_case(expected_row("r1", "A", None), expected_row("r2", "B", None), columns=(CODE, QTY))
+    with_blank = counts_for(blank, observation(rows=(row(0, "A", None), row(1, "Z", None))))
+    full = list_case(expected_row("r1", "A", "1"), expected_row("r2", "B", "2"), columns=(CODE, QTY))
+    without_blank = counts_for(full, observation(rows=(row(0, "A", "1"), row(1, "Z", "9"))))
+    assert (with_blank["correct_accepted_values"], with_blank["incorrect_accepted_values"], with_blank["list_structure_errors"]) == (1, 1, 1)
+    assert (without_blank["correct_accepted_values"], without_blank["incorrect_accepted_values"], without_blank["list_structure_errors"]) == (2, 2, 1)
+
+
+def test_blank_row_for_a_present_row_counts_false_missing_values():
+    corpus = list_case(expected_row("r1", "A", "1"), expected_row("r2", "B", "2"), columns=(CODE, QTY))
+    counts = counts_for(corpus, observation(rows=(row(0, "A", "1"), row(1, None, None)), status="partial"))
+    assert counts["false_missing_values"] == 2 and counts["list_structure_errors"] == 0
+    assert (counts["correct_accepted_values"], counts["incorrect_accepted_values"]) == (2, 0)
+    # A blank row with no unmatched expected row left in its gap is not paired.
+    extra = counts_for(corpus, observation(rows=(row(0, "A", "1"), row(1, "B", "2"), row(2, None, None)), status="partial"))
+    assert extra["false_missing_values"] == 0 and extra["correct_accepted_values"] == 4
+
+
 def test_rows_outside_expected_pages_are_not_associated():
     corpus = list_case(expected_row("r1", "A", pages=(1,)), page_ids=(1, 2))
     counts = counts_for(corpus, observation(rows=(row(0, "A", pages=(2,)),)))
