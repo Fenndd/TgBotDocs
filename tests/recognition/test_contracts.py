@@ -153,3 +153,23 @@ def test_outcome_failed_precedes_resolution_and_partial_table_counts_as_success(
     row = ListRow(cells=(FieldResult(field_id="name", status="extracted", raw_value="a", source_pages=(1,)),), source_pages=(1,), source_key="row")
     partial = ListResult(field_id="items", status="partial", rows=(row,), enumeration_complete=False)
     assert job_outcome((), (partial,)) == "partial"
+
+
+def test_final_incomplete_result_cannot_justify_a_missing_list():
+    missing = ListResult(field_id="items", status="unresolved", reason="missing", enumeration_complete=True)
+    with pytest.raises(ValidationError, match="incomplete traversal"):
+        RecognitionResult(fields=(), lists=(missing,), outcome="failed", traversal_complete=False)
+    complete = RecognitionResult(fields=(), lists=(missing,), outcome="failed", traversal_complete=True)
+    assert complete.lists[0].reason == "missing"
+
+
+def test_final_incomplete_result_cannot_justify_a_missing_cell_in_a_partial_list():
+    row = ListRow(cells=(
+        FieldResult(field_id="name", status="extracted", raw_value="Known", source_pages=(1,)),
+        FieldResult(field_id="amount", status="missing", source_pages=(1,))),
+        source_pages=(1,), source_key="row1")
+    partial = ListResult(field_id="items", status="partial", rows=(row,), enumeration_complete=False)
+    with pytest.raises(ValidationError, match="incomplete traversal"):
+        RecognitionResult(fields=(), lists=(partial,), outcome="partial", traversal_complete=False)
+    complete = RecognitionResult(fields=(), lists=(partial,), outcome="partial", traversal_complete=True)
+    assert complete.lists[0].rows[0].cells[1].status == "missing"

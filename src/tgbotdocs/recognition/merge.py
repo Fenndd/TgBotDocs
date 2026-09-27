@@ -73,7 +73,7 @@ def merge_list(field: ListField, results: tuple[ListResult, ...], *, traversal_c
     # A source identity describes an actual row occurrence, never just its content.
     seen: dict[tuple[str, tuple[int, ...]], tuple[ListRow, int]] = {}
     for result in results:
-        if not result.rows and result.status != "complete":
+        if not result.rows and result.status != "complete" and result.reason != "missing":
             enumeration_complete = False
         columns = {column.id: column for column in field.columns}
         identities = tuple((row.source_key, row.source_pages) for row in result.rows)
@@ -128,7 +128,8 @@ def merge_list(field: ListField, results: tuple[ListResult, ...], *, traversal_c
             for cell in row.cells)}) for row in rows]
     accepted = any(cell.status == "extracted" for row in rows for cell in row.cells)
     resolved = all(cell.status in ("extracted", "missing") for row in rows for cell in row.cells)
-    if enumeration_complete and resolved:
+    confirmed_empty = not rows and all(result.status == "complete" for result in results)
+    if enumeration_complete and resolved and (rows or confirmed_empty):
         status, reason = "complete", None
     elif accepted:
         status, reason = "partial", None
@@ -158,8 +159,8 @@ def merge_batches(profile: ExtractionProfile, batches: tuple[BatchResult, ...],
         if batch in unique_batches:
             continue
         positions = tuple(available_page_ids.index(page) for page in batch.page_ids)
-        if positions != tuple(range(positions[0], positions[0] + len(positions))) or positions[0] <= last_position:
-            raise ValueError("batches must contain consecutive pages in document order")
+        if positions != tuple(range(positions[0], positions[0] + len(positions))) or positions[0] != last_position + 1:
+            raise ValueError("batches must contain consecutive pages in document order as a contiguous document prefix")
         if seen_pages.intersection(batch.page_ids):
             raise ValueError("overlapping nonidentical batches")
         seen_pages.update(batch.page_ids)

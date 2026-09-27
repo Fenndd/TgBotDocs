@@ -147,3 +147,58 @@ def test_pure_merge_api_rejects_unrequested_columns_and_false_normalization():
     false = reading("raw").model_copy(update={"normalized_value": "corrected"})
     with pytest.raises(ValueError, match="normalization"):
         merge_scalar(field(), (false,), traversal_complete=True)
+
+
+def test_partial_traversal_cannot_join_continuation_across_an_unseen_page():
+    profile = ExtractionProfile(id="p", owner="u", version=1, name="Custom", description="Custom",
+                                original_instruction="Read", fields=(table(),))
+    first = BatchResult(page_ids=(1,), lists=(listing((row("left", 1, amount=None, next=True),)),))
+    third = BatchResult(page_ids=(3,), lists=(listing((row("right", 3, name=None, previous=True),)),))
+    with pytest.raises(ValueError, match="contiguous document prefix"):
+        merge_batches(profile, (first, third), (1, 2, 3), traversal_complete=False)
+    with pytest.raises(ValueError, match="contiguous document prefix"):
+        merge_batches(profile, (third,), (1, 2, 3), traversal_complete=False)
+
+
+def test_partial_prefix_preserves_reliable_rows_but_not_an_unfinished_continuation():
+    profile = ExtractionProfile(id="p", owner="u", version=1, name="Custom", description="Custom",
+                                original_instruction="Read", fields=(table(),))
+    first = BatchResult(page_ids=(1,), lists=(listing((
+        row("whole", 1, name="Complete row"), row("half", 1, name="Continuation", amount=None, next=True))),))
+    merged = merge_batches(profile, (first,), (1, 2, 3), traversal_complete=False)
+    assert merged.outcome == "partial" and not merged.traversal_complete
+    assert merged.lists[0].status == "partial" and not merged.lists[0].enumeration_complete
+    assert merged.lists[0].rows[0].cells[0].accepted_value == "Complete row"
+    assert all(cell.accepted_value is None for cell in merged.lists[0].rows[1].cells)
+
+
+@pytest.mark.parametrize("results", [
+    (listing(complete=True, status="unresolved", reason="missing"),),
+    (listing(), listing(complete=True, status="unresolved", reason="missing")),
+])
+def test_complete_traversal_preserves_missing_list_without_claiming_confirmed_empty(results):
+    result = merge_list(table(), results, traversal_complete=True)
+    assert result.status == "unresolved" and result.reason == "missing"
+    assert result.enumeration_complete and result.rows == ()
+
+
+@pytest.mark.parametrize("traversal_complete,enumeration_complete", [(False, True), (True, False)])
+def test_missing_list_becomes_unreadable_without_complete_evidence(traversal_complete, enumeration_complete):
+    missing = listing(complete=enumeration_complete, status="unresolved", reason="missing")
+    result = merge_list(table(), (missing,), traversal_complete=traversal_complete)
+    assert result.status == "unresolved" and result.reason == "unreadable"
+    assert not result.enumeration_complete
+
+
+def test_batch_merge_keeps_missing_list_failed_and_partial_pass_unreadable():
+    profile = ExtractionProfile(id="p", owner="u", version=1, name="Custom", description="Custom",
+                                original_instruction="Read", fields=(table(),))
+    missing = listing(complete=True, status="unresolved", reason="missing")
+    first = BatchResult(page_ids=(1,), lists=(missing,))
+    second = BatchResult(page_ids=(2,), lists=(missing,))
+    complete = merge_batches(profile, (first, second), (1, 2), traversal_complete=True)
+    assert complete.outcome == "failed" and complete.lists[0].reason == "missing"
+    assert complete.lists[0].status == "unresolved"
+    partial = merge_batches(profile, (first,), (1, 2), traversal_complete=False)
+    assert partial.outcome == "failed" and partial.lists[0].reason == "unreadable"
+    assert not partial.lists[0].enumeration_complete

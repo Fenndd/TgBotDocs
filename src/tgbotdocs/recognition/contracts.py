@@ -191,8 +191,11 @@ class RecognitionResult(ContractModel):
         if self.outcome != job_outcome(self.fields, self.lists, traversal_complete=self.traversal_complete):
             raise ValueError("outcome disagrees with accepted values and resolution")
         if not self.traversal_complete and (any(field.status == "missing" for field in self.fields)
-                                            or any(result.status == "complete" for result in self.lists)):
-            raise ValueError("incomplete traversal cannot justify missing fields or complete lists")
+                                            or any(result.status == "complete" or result.reason == "missing"
+                                                   for result in self.lists)
+                                            or any(cell.status == "missing" for result in self.lists
+                                                   for row in result.rows for cell in row.cells)):
+            raise ValueError("incomplete traversal cannot justify missing fields, lists, cells or complete lists")
         return self
 
     def external(self) -> dict:
