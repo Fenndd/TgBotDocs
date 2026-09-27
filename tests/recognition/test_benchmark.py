@@ -101,9 +101,17 @@ def write_reviewed(plan_dir) -> Path:
     return path
 
 
+def frozen_value() -> dict:
+    """Synthetic stand-in shaped like the runner's FrozenConfiguration (top-level fields only matter here)."""
+    return {"schema_version": 1, "created_at": "2026-09-27T12:00:00Z", "runtime_artifacts": {"build": "synthetic"},
+            "runtime_profile": {"context": 4096}, "core": {"long_side": 1600}, "prompt": {"version": "t"},
+            "policy": {"v1_threshold": 0.9, "v2": False, "v3": True}, "corpus_manifest_schema_version": 1,
+            "calibration": {"selected_point": 0}, "code_sha256": "a" * 64, "page_times": []}
+
+
 def write_config(path: Path, value=None) -> Path:
-    value = {"schema_version": 1, "verification": {"v1": 0.9, "v2": False}, "prompt_version": "t"} if value is None else value
-    path.write_text(json.dumps(value, indent=2), encoding="utf-8")
+    """Write a configuration the way the runner's canonical writer does."""
+    path.write_bytes(canonical_json_bytes(frozen_value() if value is None else value))
     return path
 
 
@@ -213,6 +221,12 @@ def gps_jpeg(size) -> bytes:
     return jpeg(size, "white", exif=exif)
 
 
+def oversized_camera_jpeg(total: int) -> bytes:
+    """A decodable camera-sized JPEG padded after its end marker to exactly `total` bytes."""
+    content = jpeg(CAPTURE_SIZE["camera"], "white")
+    return content + b"\0" * (total - len(content))
+
+
 def png_bytes(size) -> bytes:
     stream = io.BytesIO()
     Image.new("RGB", size, "white").save(stream, "PNG")
@@ -224,6 +238,8 @@ def png_bytes(size) -> bytes:
     ("camera/bench-d01.jpg", lambda: b"\xff\xd8 truncated", "undecodable_image"),
     ("camera/bench-d01.jpg", lambda: jpeg((1280, 960), "white"), "camera_original_too_small"),
     ("camera/bench-d01.jpg", lambda: gps_jpeg((2600, 100)), "location_metadata_present"),
+    ("camera/bench-d01.jpg", lambda: oversized_camera_jpeg(benchmark.BOT_API_FILE_LIMIT_BYTES + 1),
+     "exceeds_bot_api_file_limit"),
     ("telegram/bench-d02.jpg", lambda: jpeg((2000, 1500), "white"), "telegram_standard_size_mismatch"),
     ("telegram/bench-d04.jpg", lambda: jpeg((1280, 960), "white"), "telegram_hd_size_mismatch"),
 ])
@@ -231,6 +247,12 @@ def test_ingest_refuses_captures_that_do_not_match_their_delivery_path(plan_dir,
     (plan_dir / "inbox" / name).write_bytes(content())
     error = error_of(lambda: run_ingest(plan_dir))
     assert (error.code, error.details) == ("capture_invalid", (f"{name}:{code}",))
+
+
+def test_ingest_accepts_a_camera_original_at_the_bot_api_file_limit(plan_dir):
+    assert benchmark.BOT_API_FILE_LIMIT_BYTES == 20 * 1024 * 1024
+    (plan_dir / "inbox" / "camera" / "bench-d01.jpg").write_bytes(oversized_camera_jpeg(benchmark.BOT_API_FILE_LIMIT_BYTES))
+    assert run_ingest(plan_dir).split == "benchmark"
 
 
 def test_ingest_refuses_a_capture_duplicating_another_file(plan_dir):
@@ -281,9 +303,7 @@ def test_seal_binds_a_human_verified_benchmark_to_the_frozen_configuration(plan_
     reviewed = write_reviewed(plan_dir)
     config = write_config(tmp_path / "frozen.json")
     sealed = seal(reviewed, config, plan_dir / "sealed-manifest.json")
-    canonical = json.dumps(json.loads(config.read_text(encoding="utf-8")), ensure_ascii=False, sort_keys=True,
-                           separators=(",", ":")).encode()
-    assert sealed.sealed and sealed.frozen_configuration_sha256 == hashlib.sha256(canonical).hexdigest()
+    assert sealed.sealed and sealed.frozen_configuration_sha256 == hashlib.sha256(config.read_bytes()).hexdigest()
     assert sealed.frozen_configuration_sha256 == frozen_configuration_sha256(config)
     assert sealed.eligibility_reasons("benchmark") == ()
     loaded = load_corpus(plan_dir / "sealed-manifest.json")
@@ -313,11 +333,55 @@ def test_frozen_configuration_hash_refuses_invalid_files(tmp_path, content):
     assert error_of(lambda: frozen_configuration_sha256(tmp_path / "absent.json")).code == "invalid_frozen_configuration"
 
 
-def test_seal_hashes_the_configuration_independently_of_formatting(tmp_path):
-    value = {"b": [1, 2.5], "a": {"text": "Ü"}}
-    compact = write_config(tmp_path / "compact.json", value)
-    compact.write_text(json.dumps(value, separators=(",", ":")), encoding="utf-8")
-    assert frozen_configuration_sha256(compact) == frozen_configuration_sha256(write_config(tmp_path / "pretty.json", value))
+def other_json(name: str) -> bytes:
+    value = frozen_value()
+    if name == "plan_or_report":
+        return canonical_json_bytes({"cases": [1]})
+    if name == "missing_field":
+        del value["calibration"]
+    elif name == "schema_version_true":
+        value["schema_version"] = True
+    elif name == "manifest_schema_2":
+        value["corpus_manifest_schema_version"] = 2
+    return canonical_json_bytes(value)
+
+
+@pytest.mark.parametrize("name", ["plan_or_report", "missing_field", "schema_version_true",
+                                  "manifest_schema_2"])
+def test_frozen_configuration_hash_refuses_files_that_are_not_a_frozen_configuration(tmp_path, name):
+    config = tmp_path / "frozen.json"
+    config.write_bytes(other_json(name))
+    error = error_of(lambda: frozen_configuration_sha256(config))
+    assert (error.code, error.details) == ("invalid_frozen_configuration", ("not_a_frozen_configuration",))
+
+
+def test_frozen_configuration_hash_refuses_duplicate_keys_and_non_canonical_bytes(tmp_path):
+    canonical = canonical_json_bytes(frozen_value())
+    duplicate = tmp_path / "duplicate.json"
+    duplicate.write_bytes(canonical.replace(b'"v1_threshold":0.9', b'"v1_threshold":0.5,"v1_threshold":0.9'))
+    assert error_of(lambda: frozen_configuration_sha256(duplicate)).details == ("duplicate_key",)
+    variants = {"pretty": json.dumps(frozen_value(), indent=2, sort_keys=True).encode(),
+                "unsorted": json.dumps(frozen_value(), separators=(",", ":")).encode(),
+                "trailing_newline": canonical + b"\n",
+                "bom": b"\xef\xbb\xbf" + canonical}
+    assert variants["unsorted"] != canonical
+    for name, content in variants.items():
+        config = tmp_path / f"{name}.json"
+        config.write_bytes(content)
+        assert error_of(lambda path=config: frozen_configuration_sha256(path)).code \
+            == "invalid_frozen_configuration", name
+    exact = write_config(tmp_path / "exact.json")
+    assert frozen_configuration_sha256(exact) == hashlib.sha256(canonical).hexdigest()
+
+
+def test_seal_refuses_a_file_that_is_not_the_frozen_configuration(plan_dir, tmp_path):
+    reviewed = write_reviewed(plan_dir)
+    error = error_of(lambda: seal(reviewed, plan_dir / "plan.json", plan_dir / "sealed.json"))
+    assert (error.code, error.details) == ("invalid_frozen_configuration", ("not_a_frozen_configuration",))
+    pretty = tmp_path / "frozen.json"
+    pretty.write_text(json.dumps(frozen_value(), indent=2), encoding="utf-8")
+    assert error_of(lambda: seal(reviewed, pretty, plan_dir / "sealed.json")).details == ("not_canonical",)
+    assert not (plan_dir / "sealed.json").exists()
 
 
 # ---------------------------------------------------------------- command line

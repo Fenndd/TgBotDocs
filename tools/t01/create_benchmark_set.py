@@ -796,7 +796,7 @@ code{{background:#f2f4f5;padding:1px 4px}}</style>
 <p><strong>No model run may touch these cases before the benchmark is sealed.</strong> Human review is pending for every case.</p>
 <ol><li>Print <code>printable-originals.pdf</code> on A4 at 100% scale. Each page carries a small case label in the margin; keep it outside the photo.</li>
 <li>For each row below, reproduce the condition exactly once and save exactly one JPEG at the destination path, inside the <code>inbox</code> folder next to <code>plan.json</code>.</li>
-<li>Camera rows: copy the original file from the phone (USB or cloud export of the original); never a messenger copy. It must be JPEG and larger than 2,560 px on the longer side.</li>
+<li>Camera rows: copy the original file from the phone (USB or cloud export of the original); never a messenger copy. It must be JPEG, larger than 2,560 px on the longer side and at most 20 MB (the standard Bot API file download limit); if the phone's capture mode produces larger files, retake the photo in its default resolution mode.</li>
 <li>Telegram rows: send the image to a private test chat (for example, Saved Messages) as a <em>photo</em>, not as a file. Enable HD only where the row says <code>hd</code>. Open the received photo in Telegram Desktop and save it (Save image as). Standard photos are at most 1,280 px on the longer side; HD photos are larger than 1,280 and at most 2,560 px.</li>
 <li>Turn off camera location tagging or remove location metadata; ingest refuses files that contain GPS data.</li>
 <li>Then run <code>python -m tgbotdocs.recognition.benchmark ingest</code> as described in tools/t01/README-benchmark.md.</li></ol></header>

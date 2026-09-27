@@ -35,6 +35,9 @@ NEW_LAYOUTS = frozenset({"two_column", "boxed_form", "inline", "boxed_table", "r
 TELEGRAM_LONG_SIDE = {"standard": 1280, "hd": 2560}
 # A camera original sent as a file is larger than any Telegram-compressed photo.
 CAMERA_MIN_LONG_SIDE = TELEGRAM_LONG_SIDE["hd"] + 1
+# A camera original travels as a file; the standard Bot API downloads files up to 20 MB
+# (ADR-0002, OPERATIONS), so a larger original could never reach recognition.
+BOT_API_FILE_LIMIT_BYTES = 20 * 1024 * 1024
 PLACEHOLDER_SHA256 = "0" * 64
 IGNORED_INBOX_NAMES = frozenset({"Thumbs.db", "desktop.ini", ".DS_Store"})
 EXIF_GPS_TAG = 0x8825
@@ -297,8 +300,11 @@ def _inspect_capture(path: Path, pending: PendingInput, quality: str) -> tuple[s
         limit = TELEGRAM_LONG_SIDE[pending.telegram_quality]
         if longer > limit or pending.telegram_quality == "hd" and longer <= TELEGRAM_LONG_SIDE["standard"]:
             problems.append(f"telegram_{pending.telegram_quality}_size_mismatch")
-    elif longer < CAMERA_MIN_LONG_SIDE:
-        problems.append("camera_original_too_small")
+    else:
+        if longer < CAMERA_MIN_LONG_SIDE:
+            problems.append("camera_original_too_small")
+        if path.stat().st_size > BOT_API_FILE_LIMIT_BYTES:
+            problems.append("exceeds_bot_api_file_limit")
     return tuple(problems)
 
 
@@ -369,15 +375,50 @@ def ingest(plan_path: Path, inbox_dir: Path, output_manifest_path: Path, *,
         raise BenchmarkError(str(error)) from None
 
 
+# Required top-level fields of the runner's frozen configuration (design brief section 3).
+# Interim shape guard only: it tolerates fields the runner may add, and the integrated seal
+# should delegate to the runner's configuration loader, which validates the full schema.
+FROZEN_CONFIGURATION_FIELDS = frozenset({
+    "schema_version", "created_at", "runtime_artifacts", "runtime_profile", "core", "prompt", "policy",
+    "corpus_manifest_schema_version", "calibration", "code_sha256"})
+
+
 def frozen_configuration_sha256(path: Path) -> str:
-    """SHA-256 over the canonical JSON bytes of a frozen configuration file."""
+    """SHA-256 over a frozen configuration file stored in its canonical JSON form.
+
+    The file must already be canonical (sorted keys, compact separators, UTF-8, no
+    duplicate keys, no trailing bytes), so the hash is the hash of the file itself and a
+    hand-edited or re-serialized copy is refused rather than silently normalized. It must
+    carry the required top-level fields of a frozen configuration, which refuses plans,
+    calibration reports and manifests passed by mistake.
+    """
     try:
-        value = json.loads(path.read_bytes().decode("utf-8"), parse_constant=_reject_constant)
+        raw = path.read_bytes()
+        value = json.loads(raw.decode("utf-8"), parse_constant=_reject_constant, object_pairs_hook=_unique_keys)
+    except _DuplicateKey:
+        raise BenchmarkError("invalid_frozen_configuration", ("duplicate_key",)) from None
     except (OSError, UnicodeDecodeError, ValueError):
         raise BenchmarkError("invalid_frozen_configuration") from None
     if not isinstance(value, dict) or not value:
         raise BenchmarkError("invalid_frozen_configuration")
-    return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
+    versions = (value.get("schema_version"), value.get("corpus_manifest_schema_version"))
+    if not FROZEN_CONFIGURATION_FIELDS <= set(value) or any(type(v) is not int or v != 1 for v in versions):
+        raise BenchmarkError("invalid_frozen_configuration", ("not_a_frozen_configuration",))
+    canonical = canonical_json_bytes(value)
+    if raw != canonical:
+        raise BenchmarkError("invalid_frozen_configuration", ("not_canonical",))
+    return hashlib.sha256(canonical).hexdigest()
+
+
+class _DuplicateKey(ValueError):
+    pass
+
+
+def _unique_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    value = dict(pairs)
+    if len(value) != len(pairs):
+        raise _DuplicateKey("duplicate_key")
+    return value
 
 
 def _reject_constant(_: str) -> None:
