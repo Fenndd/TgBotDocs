@@ -6,6 +6,8 @@
 # Personal Claude Code overrides, not shared project instructions.
 .claude/settings.local.json
 CLAUDE.local.md
+# Temporary isolated worktrees created by Claude Code subagents.
+.claude/worktrees/
 
 # Operating-system metadata.
 .DS_Store
