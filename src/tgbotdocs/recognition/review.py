@@ -13,7 +13,7 @@ import hashlib
 import html
 import json
 from pathlib import Path, PurePosixPath
-from typing import Literal
+from typing import Callable, Literal
 
 from pydantic import Field, StrictBool, StrictStr, ValidationError, model_validator
 
@@ -24,6 +24,17 @@ from .corpus import (CorpusCase, CorpusManifest, ExpectedList, ExpectedOutcome, 
 Method = Literal["script_reading", "glyph_sequence_comparison", "published_transcription"]
 METHODS = ("script_reading", "glyph_sequence_comparison", "published_transcription")
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg"}
+
+
+def applicable_methods(case) -> tuple[str, ...]:
+    """Review methods that can describe how this case's ground truth was checked.
+
+    A published transcription exists only for permitted public materials (ACCEPTANCE_PLAN);
+    synthetic and separately authorized cases are checked by reading or glyph comparison.
+    """
+    if case.origin.kind == "permitted_public":
+        return METHODS
+    return tuple(method for method in METHODS if method != "published_transcription")
 
 
 class ReviewError(ValueError):
@@ -49,15 +60,28 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def write_new_file(path: Path, data: bytes) -> None:
-    """Create ``path``; an existing file is never overwritten."""
+def write_new_file(path: Path, data: bytes, verify: Callable[[Path], object] | None = None) -> None:
+    """Create ``path``; an existing file is never overwritten.
+
+    ``verify`` runs on the written file. If writing or verification fails, the new file is
+    deleted before the error propagates, so no unverified output is left behind.
+    """
     try:
-        with path.open("xb") as stream:
-            stream.write(data)
+        stream = path.open("xb")
     except FileExistsError:
         raise ReviewError("output_exists") from None
     except OSError:
         raise ReviewError("output_unwritable") from None
+    try:
+        with stream:
+            stream.write(data)
+        if verify is not None:
+            verify(path)
+    except BaseException as error:
+        path.unlink(missing_ok=True)
+        if isinstance(error, OSError):
+            raise ReviewError("output_unwritable") from None
+        raise
 
 
 def expected_outcome_status(fields: tuple[ExpectedValue, ...], lists: tuple[ExpectedList, ...]) -> str:
@@ -138,6 +162,8 @@ def parse_decisions(data: bytes) -> ReviewDecisions:
 def _reviewed_case(case: CorpusCase, decision: CaseDecision, decisions: ReviewDecisions) -> CorpusCase:
     if decision.method is None:
         raise ReviewError("review_method_required", case.case_id)
+    if decision.method not in applicable_methods(case):
+        raise ReviewError("review_method_not_applicable_to_origin", case.case_id)
     if case.expected is None:
         raise ReviewError("ground_truth_missing_reject_case", case.case_id)
     expected = {key: value for key, value in reviewable_values(case)}
@@ -378,7 +404,7 @@ def _case_html(case: CorpusCase, index: int) -> str:
     hint = ("Difficult case: choose the visibility of every value as it appears in the model input."
             if difficult else "Visibility defaults to legible. A readable case with a value that is not legible "
             "must be rejected instead.")
-    methods = "".join(f'<option value="{m}">{m.replace("_", " ")}</option>' for m in METHODS)
+    methods = "".join(f'<option value="{m}">{m.replace("_", " ")}</option>' for m in applicable_methods(case))
     return f"""
 <section class="case" id="case-{index}" data-case="{_e(case.case_id)}" data-index="{index}">
 <h2>{_e(case.case_id)} <small>{_e(case.quality)} · {_e(case.category)} · {_e(case.script)} ({_e(case.language)}) ·

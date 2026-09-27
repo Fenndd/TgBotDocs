@@ -240,6 +240,21 @@ def test_output_location_and_overwrite_refused(package, tmp_path, capsys):
     assert existing.read_bytes() == b"keep"
 
 
+def test_failed_post_write_check_removes_output(package, capsys, monkeypatch):
+    legacy = package.write()
+    output = legacy.parent / "canonical-manifest.json"
+
+    def changed_artifact(path, **kwargs):  # an artifact changes between conversion and the post-write check
+        raise canon.CorpusError("artifact_hash_mismatch")
+    monkeypatch.setattr(canon, "load_corpus", changed_artifact)
+    assert canon.main(["--legacy", str(legacy), "--output", str(output)]) == 2
+    assert "artifact_hash_mismatch" in capsys.readouterr().err
+    assert not output.exists()
+    monkeypatch.undo()
+    assert canon.main(["--legacy", str(legacy), "--output", str(output)]) == 0
+    assert load_corpus(output).files_verified
+
+
 def test_missing_distractor_category_and_unknown_status_refused(tmp_path):
     package = Package(tmp_path / "package")
     package.add("only-invoice", "invoice")

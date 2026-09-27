@@ -307,10 +307,10 @@ def write_canonical(legacy_path: Path, output: Path) -> tuple[CorpusManifest, st
     manifest = canonicalize(legacy_path)
     data = manifest_bytes(manifest)
     try:
-        write_new_file(output, data)
+        # Verifies every canonical artifact hash against the files on disk; a failure deletes the output.
+        write_new_file(output, data, verify=load_corpus)
     except ReviewError as error:
         raise CanonicalizationError(error.code) from None
-    load_corpus(output)  # verifies every canonical artifact hash against the files on disk
     return manifest, sha256_bytes(data)
 
 

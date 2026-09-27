@@ -23,6 +23,8 @@ EXPLANATIONS = {
     "eligible for calibration; prepare replacement cases first",
     "review_manifest_hash_mismatch": "the decisions were exported for different manifest bytes",
     "human_attestation_missing": "the reviewer did not attest to personally inspecting every case",
+    "review_method_not_applicable_to_origin": "a published transcription exists only for permitted public "
+    "materials; choose script reading or glyph sequence comparison for this case",
     "review_already_recorded": "only a manifest whose cases are all pending review can be transcribed",
 }
 
@@ -56,8 +58,8 @@ def _review_apply(args) -> int:
     decisions = parse_decisions(_read(args.decisions, "review_decisions_unavailable"))
     reviewed, removed = apply_decisions(corpus.manifest, digest, decisions)
     data = manifest_bytes(reviewed)
-    write_new_file(args.output, data)
-    load_corpus(args.output)  # the written manifest must load with every artifact hash verified
+    # The written manifest must load with every artifact hash verified; otherwise it is deleted.
+    write_new_file(args.output, data, verify=load_corpus)
     print(json.dumps({"reviewed_manifest": str(args.output), "sha256": sha256_bytes(data),
                       "verified_cases": len(reviewed.cases), "removed_rejected_case_ids": list(removed),
                       "purpose": reviewed.purpose}))

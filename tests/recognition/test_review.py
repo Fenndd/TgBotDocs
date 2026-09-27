@@ -1,7 +1,12 @@
 """Human review tooling. Decisions and attestations below are synthetic test data, not a human review."""
+from datetime import datetime
 import hashlib
+from html.parser import HTMLParser
 import json
+import os
 import re
+import shutil
+import subprocess
 
 import pytest
 
@@ -10,7 +15,8 @@ from tgbotdocs.recognition.contracts import ExtractionProfile, ListField, Scalar
 from tgbotdocs.recognition.corpus import (Artifact, CorpusCase, CorpusManifest, ExpectedList, ExpectedOutcome,
                                           ExpectedRow, ExpectedValue, Origin, case_review_digest,
                                           declared_denominators, load_corpus)
-from tgbotdocs.recognition.review import manifest_bytes, reviewable_values
+from tgbotdocs.recognition import review
+from tgbotdocs.recognition.review import manifest_bytes, parse_decisions, reviewable_values
 
 SCRIPTS = ("Latin", "Cyrillic", "Arabic", "Chinese", "Japanese", "Devanagari")
 CATEGORIES = ("identity", "invoice", "receipt", "certificate", "contract", "application", "letter", "repeating_rows")
@@ -248,3 +254,246 @@ def test_status_is_content_free(corpus, capsys):
     assert len(status["pending_review_case_ids"]) == 24 and status["files_verified"] is True
     assert "human_review_or_ground_truth_pending" in status["eligibility"]["calibration"]
     assert "benchmark_not_sealed_and_frozen" in status["eligibility"]["benchmark"]
+
+
+def test_review_form_offers_only_methods_applicable_to_origin(tmp_path, capsys):
+    path, manifest = write_manifest(tmp_path / "corpus")
+    form = path.parent / "review-form.html"
+    assert run(["review-form", "--manifest", path, "--output", form], capsys)[0] == 0
+    page = form.read_text(encoding="utf-8")
+    assert all(case.origin.kind == "synthetic" for case in manifest.cases)
+    assert 'value="published_transcription"' not in page
+    assert page.count('<option value="script_reading">') == len(manifest.cases)
+    assert page.count('<option value="glyph_sequence_comparison">') == len(manifest.cases)
+    public = make_case(tmp_path / "corpus", 0, "readable")
+    public = public.model_copy(update={"origin": public.origin.model_copy(update={"kind": "permitted_public"})})
+    assert review.applicable_methods(public) == review.METHODS
+
+
+def test_published_transcription_refused_for_synthetic_case(corpus, tmp_path, capsys):
+    path, manifest = corpus
+    data = decisions_for(manifest, path)
+    case_decision(data, "case-02")["method"] = "published_transcription"
+    code, _, err, output = apply(tmp_path, path, data, capsys)
+    assert code == 2 and "review_method_not_applicable_to_origin (case-02)" in err and "public materials" in err
+    assert not output.exists()
+
+
+class _FailingStream:
+    """Writes a few bytes, then fails like a full disk."""
+
+    def __init__(self, stream):
+        self.stream = stream
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.stream.close()
+
+    def write(self, data):
+        self.stream.write(data[:10])
+        raise OSError("synthetic write failure")
+
+
+@pytest.mark.parametrize("failure", ["verify", "write"])
+def test_failed_output_is_removed_and_retry_succeeds(corpus, tmp_path, capsys, monkeypatch, failure):
+    path, manifest = corpus
+    data = decisions_for(manifest, path)
+    if failure == "verify":
+        original = corpus_cli.load_corpus
+
+        def check(target, **kwargs):  # an artifact changes between the input load and the post-write check
+            if target.name == "reviewed.json":
+                raise corpus_cli.CorpusError("artifact_hash_mismatch")
+            return original(target, **kwargs)
+        monkeypatch.setattr(corpus_cli, "load_corpus", check)
+    else:
+        opener = type(path).open
+
+        def failing_open(self, mode="r", *args, **kwargs):
+            stream = opener(self, mode, *args, **kwargs)
+            return _FailingStream(stream) if self.name == "reviewed.json" and mode == "xb" else stream
+        monkeypatch.setattr(type(path), "open", failing_open)
+    code, _, err, output = apply(tmp_path, path, data, capsys)
+    assert code == 2 and ("artifact_hash_mismatch" if failure == "verify" else "output_unwritable") in err
+    assert not output.exists()
+    monkeypatch.undo()
+    code, _, err, output = apply(tmp_path, path, data, capsys)
+    assert code == 0, err
+    assert output.exists()
+
+
+# ---------------------------------------------------------------------------
+# The form's own export code, run in node against a minimal DOM shim
+
+NODE = shutil.which("node")
+VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+
+DOM_SHIM = r"""
+const fs = require("fs");
+const input = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+function El(node, parent) {
+  this.tagName = node.tag; this.attrs = node.attrs; this.parent = parent; this.listeners = {};
+  this.checked = "checked" in node.attrs; this.disabled = "disabled" in node.attrs; this.textContent = "";
+  this.value = node.tag === "textarea" ? node.text : (node.attrs.value !== undefined ? node.attrs.value : "");
+  this.children = node.children.map((child) => new El(child, this));
+  if (node.tag === "select") {
+    const options = this.children.filter((c) => c.tagName === "option");
+    const chosen = options.find((o) => "selected" in o.attrs) || options[0];
+    this.value = chosen ? chosen.attrs.value : "";
+  }
+}
+El.prototype.getAttribute = function (name) { return name in this.attrs ? this.attrs[name] : null; };
+El.prototype.hasAttribute = function (name) { return name in this.attrs; };
+El.prototype.addEventListener = function (type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); };
+El.prototype.descendants = function* () { for (const c of this.children) { yield c; yield* c.descendants(); } };
+El.prototype.querySelectorAll = function (selector) {
+  const m = /^([a-z]+)?(?:\.([\w-]+))?(?:\[([\w-]+)="([^"]*)"\])?(:checked)?$/.exec(selector);
+  if (!m) { throw new Error("unsupported selector " + selector); }
+  const out = [];
+  for (const el of this.descendants()) {
+    if (m[1] && el.tagName !== m[1]) { continue; }
+    if (m[2] && !(el.getAttribute("class") || "").split(/\s+/).includes(m[2])) { continue; }
+    if (m[3] && el.getAttribute(m[3]) !== m[4]) { continue; }
+    if (m[5] && !el.checked) { continue; }
+    out.push(el);
+  }
+  return out;
+};
+El.prototype.querySelector = function (selector) { return this.querySelectorAll(selector)[0] || null; };
+const root = new El(input.tree, null);
+const blobs = {};
+let exported = null;
+let downloadName = null;
+const document = {
+  body: { appendChild() {} },
+  listeners: {},
+  getElementById(id) { return root.querySelector("[id=\"" + id + "\"]"); },
+  querySelectorAll(selector) { return root.querySelectorAll(selector); },
+  addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
+  createElement() { return { click() { exported = blobs[this.href]; downloadName = this.download; }, remove() {} }; },
+};
+function Blob(parts) { this.text = parts.join(""); }
+const URL = {
+  createObjectURL(blob) { const key = "blob:" + Object.keys(blobs).length; blobs[key] = blob.text; return key; },
+  revokeObjectURL() {},
+};
+new Function("document", "Blob", "URL", "setTimeout", input.script)(document, Blob, URL, function () {});
+function fire() { (document.listeners.change || []).forEach((fn) => fn()); }
+const button = document.getElementById("export");
+const disabled = [];
+for (const step of input.steps) {
+  if (step.op === "value") { document.getElementById(step.id).value = step.value; }
+  else if (step.op === "check") { document.getElementById(step.id).checked = step.checked; }
+  else if (step.op === "radio") {
+    for (const el of root.querySelectorAll("input[name=\"" + step.name + "\"]")) {
+      el.checked = el.getAttribute("value") === step.value;
+    }
+  } else if (step.op === "select") { root.querySelector("select[name=\"" + step.name + "\"]").value = step.value; }
+  else if (step.op === "click") { button.listeners.click.forEach((fn) => fn()); }
+  fire();
+  disabled.push(button.disabled);
+}
+process.stdout.write(JSON.stringify({disabled: disabled, exported: exported, download: downloadName}));
+"""
+
+
+class _Tree(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.root = {"tag": "#root", "attrs": {}, "children": [], "text": ""}
+        self.stack = [self.root]
+
+    def handle_starttag(self, tag, attrs):
+        node = {"tag": tag, "attrs": {k: "" if v is None else v for k, v in attrs}, "children": [], "text": ""}
+        self.stack[-1]["children"].append(node)
+        if tag not in VOID:
+            self.stack.append(node)
+
+    def handle_endtag(self, tag):
+        while len(self.stack) > 1:
+            if self.stack.pop()["tag"] == tag:
+                break
+
+    def handle_data(self, data):
+        self.stack[-1]["text"] += data
+
+
+def run_form(tmp_path, page, steps, tz):
+    parser = _Tree()
+    parser.feed(page)
+    script = re.search(r"<script>(.*)</script>", page, re.S).group(1)
+    harness = tmp_path / "harness.js"
+    harness.write_text(DOM_SHIM, encoding="utf-8")
+    state = tmp_path / "form-state.json"
+    state.write_text(json.dumps({"tree": parser.root, "script": script, "steps": steps}), encoding="utf-8")
+    result = subprocess.run([NODE, str(harness), str(state)], capture_output=True, text=True, encoding="utf-8",
+                            timeout=60, env={**os.environ, "TZ": tz}, check=True)
+    return json.loads(result.stdout)
+
+
+def render_form(path, capsys):
+    form = path.parent / "review-form.html"
+    assert run(["review-form", "--manifest", path, "--output", form], capsys)[0] == 0
+    return form.read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not available to run the form script")
+@pytest.mark.parametrize("tz, offset_minutes", [("Asia/Kolkata", 330), ("America/Sao_Paulo", -180)])
+def test_form_export_is_gated_and_round_trips_through_review_apply(corpus, tmp_path, capsys, tz, offset_minutes):
+    path, manifest = corpus
+    page = render_form(path, capsys)
+    required = [{"op": "value", "id": "reviewer", "value": " Synthetic test reviewer "},
+                {"op": "check", "id": "attest", "checked": True}]
+    difficult = []
+    for index, case in enumerate(manifest.cases):
+        rejected = case.case_id == "case-03"
+        required.append({"op": "radio", "name": f"c{index}-decision", "value": "rejected" if rejected else "verified"})
+        if not rejected:
+            required.append({"op": "select", "name": f"c{index}-method",
+                             "value": "glyph_sequence_comparison" if index == 5 else "script_reading"})
+        if case.quality == "difficult":
+            difficult += [{"op": "radio", "name": f"c{index}-v{n}",
+                           "value": "not_legible" if index == 16 and n == 0 else "legible"}
+                          for n in range(len(reviewable_values(case)))]
+    toggles = [({"op": "select", "name": "c0-method", "value": ""},
+                {"op": "select", "name": "c0-method", "value": "script_reading"}),
+               ({"op": "value", "id": "reviewer", "value": "   "},
+                {"op": "value", "id": "reviewer", "value": "Synthetic test reviewer"}),
+               ({"op": "check", "id": "attest", "checked": False},
+                {"op": "check", "id": "attest", "checked": True})]
+    steps = [{"op": "click"}] + required + difficult + [step for pair in toggles for step in pair] + [{"op": "click"}]
+    result = run_form(tmp_path, page, steps, tz)
+    complete_at = 1 + len(required) + len(difficult)
+    # Export stays disabled (an early click exports nothing) until the last required item is chosen.
+    assert all(result["disabled"][:complete_at - 1]) and result["disabled"][complete_at - 1] is False
+    assert result["disabled"][complete_at:] == [True, False] * len(toggles) + [False]
+    assert result["download"] == "review-decisions.json" and result["exported"]
+    data = json.loads(result["exported"])
+    decisions = parse_decisions(result["exported"].encode("utf-8"))
+    assert decisions.reviewed_at.utcoffset().total_seconds() == offset_minutes * 60
+    assert datetime.fromisoformat(data["reviewed_at"]).tzinfo is not None
+    assert case_decision(data, "case-03") == {"case_id": "case-03", "decision": "rejected", "method": None,
+                                              "values": [], "notes": ""}
+    code, out, err, output = apply(tmp_path, path, data, capsys)
+    assert code == 0, err
+    assert json.loads(out)["removed_rejected_case_ids"] == ["case-03"]
+    cases = {case.case_id: case for case in load_corpus(output).manifest.cases}
+    assert cases["case-05"].review.method == "glyph_sequence_comparison"
+    assert cases["case-16"].expected.fields[0].status == "unreadable"
+    assert cases["case-00"].review.reviewer == "Synthetic test reviewer"
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not available to run the form script")
+def test_form_export_requires_difficult_visibility(corpus, tmp_path, capsys):
+    path, manifest = corpus
+    page = render_form(path, capsys)
+    steps = [{"op": "value", "id": "reviewer", "value": "Synthetic test reviewer"},
+             {"op": "check", "id": "attest", "checked": True}]
+    for index, _ in enumerate(manifest.cases):
+        steps += [{"op": "radio", "name": f"c{index}-decision", "value": "verified"},
+                  {"op": "select", "name": f"c{index}-method", "value": "script_reading"}]
+    steps.append({"op": "click"})
+    result = run_form(tmp_path, page, steps, "UTC")
+    assert all(result["disabled"]) and result["exported"] is None
