@@ -67,10 +67,10 @@ Ingest checks what it can: a standard Telegram photo is at most 1,280 px on its 
 
 ## 4. Human review
 
-Review uses the corpus review tooling of T01b (`python -m tgbotdocs.recognition.corpus_cli`; see its documentation once integrated):
+Review uses the corpus review tooling of T01b (`python -m tgbotdocs.recognition.corpus_cli`; see Stage 2 of [T01_PROCEDURE](../../docs/testing/T01_PROCEDURE.md)):
 
 1. `review-form --manifest <dir>\benchmark-manifest.json --output <dir>\review-form.html` writes a static form next to the manifest.
-2. The person opens it, inspects every input artifact against its reference sheet, confirms every expected value, page, row association, matching status and profile applicability, records visibility for difficult cases, chooses the method (`script_reading`, `glyph_sequence_comparison` or `published_transcription`), and exports `review-decisions.json` with the attestation. For scripts the reviewer cannot read, compare the complete glyph sequence with the reference and record that method.
+2. The person opens it, inspects every input artifact against its reference sheet, confirms every expected value, page, row association, matching status and profile applicability, records visibility for difficult cases, chooses the method (`script_reading` or `glyph_sequence_comparison`; every benchmark case is synthetic, and `published_transcription` applies only to permitted public materials, so the form does not offer it and `review-apply` refuses it here), and exports `review-decisions.json` with the attestation. For scripts the reviewer cannot read, compare the complete glyph sequence with the reference and record that method.
 3. `review-apply --manifest <dir>\benchmark-manifest.json --decisions review-decisions.json --output <dir>\reviewed-manifest.json` applies only the person's decisions.
 
 A difficult value that is not legible in the actual capture becomes `unreadable` through the review decisions, not by assumption. A rejected benchmark case is not dropped: see "Replacing a case".
