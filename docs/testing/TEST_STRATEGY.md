@@ -1,6 +1,6 @@
 # Test Strategy
 
-Status: defined for subsequent development; revised on 2026-09-27 after the independent review (staged T01, walking skeleton, model-based state machine tests, runtime tests). There are no product tests or commands yet.
+Status: implementation active, 2026-09-27. The [T01a runtime report](T01A_REPORT.md) records executed exploratory checks and measurement-harness tests. Production recognition-core tests are being implemented in T01b; product integration and acceptance remain outstanding. The strategy below is unchanged.
 
 ## Test Levels
 

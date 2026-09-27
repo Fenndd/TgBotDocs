@@ -1,0 +1,8 @@
+# Exploratory T01a environment, Python 3.14.5. Product lockfile begins in T01b.
+httpx==0.28.1
+Pillow==12.3.0
+pypdfium2==5.13.0
+psutil==7.2.2
+reportlab==5.0.1
+jsonschema==4.26.0
+pytest==9.1.1

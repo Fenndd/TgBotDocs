@@ -1,8 +1,8 @@
 # Telegram Bot for Extracting Data from Documents
 
-Stage: planning is complete and was revised after an independent review on 2026-09-27; the next step is T01a. The bot receives documents in Telegram and returns only the data requested in the user's personal text settings. The first version accepts arbitrary documents in any languages, with an honest refusal when they cannot be read; processing is local and must fit the current PC's hardware. The completed product is intended to be delivered to the customer.
+Stage: T01 implementation is active. [T01a runtime feasibility](docs/testing/T01A_REPORT.md) meets the technical condition to implement T01b; quality acceptance and the finished bot remain incomplete. The intended bot receives documents in Telegram and returns only the data requested in the user's personal text settings. The first version accepts arbitrary documents in any languages, with an honest refusal when they cannot be read; processing is local and must fit the current PC's hardware.
 
-The selected stack is Python + aiogram + PostgreSQL and a direct local Qwen3-VL-4B-Instruct Q4_K_M through llama.cpp. The next task is [T01a: runtime feasibility on the current PC](specs/T01-recognition-baseline.md). No source code, dependencies, or infrastructure are being created in this session; model quality has not yet been tested.
+The selected stack is Python + aiogram + PostgreSQL and direct local Qwen3-VL-4B-Instruct Q4_K_M through llama.cpp. Current experimental commands and their limitations are recorded in the [T01a report](docs/testing/T01A_REPORT.md). Human corpus review, T01b calibration, and the sealed T01c gate are still required before T02. Final real-Telegram testing and remote deployment are deferred by the current task instruction.
 
 ## Navigation
 
@@ -29,4 +29,4 @@ The selected stack is Python + aiogram + PostgreSQL and a direct local Qwen3-VL-
 - [Delegation](docs/engineering/AI_ORCHESTRATION.md) covers subtask selection and subagent parameters.
 - [Preparation history](docs/engineering/SETUP_NOTES.md) explains the rationale for the initial structure.
 
-Documentation is maintained in English. There are no application install, build, or test commands yet. The original idea remains in the provided file outside the repository; a full copy is not transferred into the project.
+Documentation is maintained in English. Exploratory tooling exists under `tools/t01`; it is not a finished bot or product installer. The original idea remains in the provided file outside the repository; a full copy is not transferred into the project.

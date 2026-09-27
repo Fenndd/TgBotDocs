@@ -1,0 +1,652 @@
+{
+  "mode": "development",
+  "configuration": {
+    "id": "gpu-q8-1024",
+    "vision": "gpu",
+    "kv": "q8_0",
+    "image_tokens": 1024,
+    "context": 4096
+  },
+  "requests": [
+    {
+      "ok": true,
+      "schema_valid": true,
+      "exact_match": true,
+      "parse_or_contract_error": false,
+      "finish_reason": "stop",
+      "cancelled": false,
+      "timed_out": false,
+      "timeout_type": null,
+      "received_content_chunks": 208,
+      "duration_s": 3.887690700008534,
+      "first_token_s": 1.0208094000117853,
+      "probability_count": 208,
+      "all_probabilities_numeric": true,
+      "nonzero_raw_logprob_count": 21,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 1217,
+        "prompt_ms": 919.781,
+        "prompt_per_token_ms": 0.7557773212818405,
+        "prompt_per_second": 1323.1410520547827,
+        "predicted_n": 209,
+        "predicted_ms": 2862.99,
+        "predicted_per_token_ms": 13.764375,
+        "predicted_per_second": 72.65131907551196
+      },
+      "resources": {
+        "samples": 7,
+        "server_peak_rss_mib": 3010.6640625,
+        "server_peak_private_mib": 4844.58984375,
+        "system_min_available_mib": 2484.69921875,
+        "gpu_peak_total_used_mib": 5020.0,
+        "gpu_capacity_mib": 6144.0
+      },
+      "evaluation": {
+        "requested_values": 10,
+        "exact_values": 10
+      },
+      "reserved_output_tokens": 1024,
+      "output_reserve_fits_context": true,
+      "image_encoding_s": null,
+      "image_encoding_note": "Server prompt_ms combines vision encoding and prompt evaluation; separate duration unavailable in official server",
+      "slot": {
+        "confirmed": true,
+        "release_s": 0.0011929000029340386
+      },
+      "id": "dev-01",
+      "pages": 1,
+      "input_sha256": [
+        "ee083e5cb729c9b06160f4537f32aff2da0700ae5f7f589a63948be90f2e8f96"
+      ]
+    },
+    {
+      "ok": true,
+      "schema_valid": true,
+      "exact_match": true,
+      "parse_or_contract_error": false,
+      "finish_reason": "stop",
+      "cancelled": false,
+      "timed_out": false,
+      "timeout_type": null,
+      "received_content_chunks": 88,
+      "duration_s": 2.0324368000146933,
+      "first_token_s": 0.8405714000109583,
+      "probability_count": 88,
+      "all_probabilities_numeric": true,
+      "nonzero_raw_logprob_count": 23,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 1127,
+        "prompt_ms": 796.325,
+        "prompt_per_token_ms": 0.7065882874889087,
+        "prompt_per_second": 1415.2513107085674,
+        "predicted_n": 89,
+        "predicted_ms": 1189.409,
+        "predicted_per_token_ms": 13.516011363636364,
+        "predicted_per_second": 73.98632430055598
+      },
+      "resources": {
+        "samples": 3,
+        "server_peak_rss_mib": 3042.73828125,
+        "server_peak_private_mib": 4782.74609375,
+        "system_min_available_mib": 2437.9921875,
+        "gpu_peak_total_used_mib": 5005.0,
+        "gpu_capacity_mib": 6144.0
+      },
+      "evaluation": {
+        "requested_values": 4,
+        "exact_values": 4
+      },
+      "reserved_output_tokens": 1024,
+      "output_reserve_fits_context": true,
+      "image_encoding_s": null,
+      "image_encoding_note": "Server prompt_ms combines vision encoding and prompt evaluation; separate duration unavailable in official server",
+      "slot": {
+        "confirmed": true,
+        "release_s": 0.0012928000069223344
+      },
+      "id": "dev-02",
+      "pages": 1,
+      "input_sha256": [
+        "11aa6581cf88b4cf5674cc207774ed235366dfe8a4eabe6489b8cca9738bfbbf"
+      ]
+    },
+    {
+      "ok": true,
+      "schema_valid": true,
+      "exact_match": false,
+      "parse_or_contract_error": false,
+      "finish_reason": "stop",
+      "cancelled": false,
+      "timed_out": false,
+      "timeout_type": null,
+      "received_content_chunks": 102,
+      "duration_s": 2.3562875000061467,
+      "first_token_s": 0.8858144999830984,
+      "probability_count": 102,
+      "all_probabilities_numeric": true,
+      "nonzero_raw_logprob_count": 34,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 1138,
+        "prompt_ms": 799.919,
+        "prompt_per_token_ms": 0.7029165202108963,
+        "prompt_per_second": 1422.6440427093244,
+        "predicted_n": 103,
+        "predicted_ms": 1466.537,
+        "predicted_per_token_ms": 14.377813725490196,
+        "predicted_per_second": 69.55160353949474
+      },
+      "resources": {
+        "samples": 4,
+        "server_peak_rss_mib": 3044.73046875,
+        "server_peak_private_mib": 4786.02734375,
+        "system_min_available_mib": 2409.953125,
+        "gpu_peak_total_used_mib": 5080.0,
+        "gpu_capacity_mib": 6144.0
+      },
+      "evaluation": {
+        "requested_values": 5,
+        "exact_values": 2
+      },
+      "reserved_output_tokens": 1024,
+      "output_reserve_fits_context": true,
+      "image_encoding_s": null,
+      "image_encoding_note": "Server prompt_ms combines vision encoding and prompt evaluation; separate duration unavailable in official server",
+      "slot": {
+        "confirmed": true,
+        "release_s": 0.0013058000477030873
+      },
+      "id": "dev-03",
+      "pages": 1,
+      "input_sha256": [
+        "78dfa2558836cd4acbe6a9588742d315b228125a610c4f33abc0f20c0decdf9e"
+      ]
+    },
+    {
+      "ok": true,
+      "schema_valid": true,
+      "exact_match": true,
+      "parse_or_contract_error": false,
+      "finish_reason": "stop",
+      "cancelled": false,
+      "timed_out": false,
+      "timeout_type": null,
+      "received_content_chunks": 94,
+      "duration_s": 2.1223472999990918,
+      "first_token_s": 0.8907043999643065,
+      "probability_count": 94,
+      "all_probabilities_numeric": true,
+      "nonzero_raw_logprob_count": 16,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 1138,
+        "prompt_ms": 781.415,
+        "prompt_per_token_ms": 0.6866564147627416,
+        "prompt_per_second": 1456.3324225923484,
+        "predicted_n": 95,
+        "predicted_ms": 1228.745,
+        "predicted_per_token_ms": 13.071755319148934,
+        "predicted_per_second": 76.50081994229886
+      },
+      "resources": {
+        "samples": 4,
+        "server_peak_rss_mib": 3019.203125,
+        "server_peak_private_mib": 4735.0859375,
+        "system_min_available_mib": 2394.95703125,
+        "gpu_peak_total_used_mib": 5094.0,
+        "gpu_capacity_mib": 6144.0
+      },
+      "evaluation": {
+        "requested_values": 5,
+        "exact_values": 5
+      },
+      "reserved_output_tokens": 1024,
+      "output_reserve_fits_context": true,
+      "image_encoding_s": null,
+      "image_encoding_note": "Server prompt_ms combines vision encoding and prompt evaluation; separate duration unavailable in official server",
+      "slot": {
+        "confirmed": true,
+        "release_s": 0.001228200038895011
+      },
+      "id": "dev-04",
+      "pages": 1,
+      "input_sha256": [
+        "19fe9c53fd8b07bda1f41d71e846d29a6d236cf11d65189f80875a0fb3d1f215"
+      ]
+    },
+    {
+      "ok": true,
+      "schema_valid": true,
+      "exact_match": true,
+      "parse_or_contract_error": false,
+      "finish_reason": "stop",
+      "cancelled": false,
+      "timed_out": false,
+      "timeout_type": null,
+      "received_content_chunks": 102,
+      "duration_s": 2.1667003999464214,
+      "first_token_s": 0.8285505999810994,
+      "probability_count": 102,
+      "all_probabilities_numeric": true,
+      "nonzero_raw_logprob_count": 27,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 1137,
+        "prompt_ms": 785.073,
+        "prompt_per_token_ms": 0.6904775725593667,
+        "prompt_per_second": 1448.2729631511972,
+        "predicted_n": 103,
+        "predicted_ms": 1335.432,
+        "predicted_per_token_ms": 13.092470588235294,
+        "predicted_per_second": 76.37977822906744
+      },
+      "resources": {
+        "samples": 3,
+        "server_peak_rss_mib": 3047.7421875,
+        "server_peak_private_mib": 4766.44921875,
+        "system_min_available_mib": 2389.6640625,
+        "gpu_peak_total_used_mib": 5094.0,
+        "gpu_capacity_mib": 6144.0
+      },
+      "evaluation": {
+        "requested_values": 5,
+        "exact_values": 5
+      },
+      "reserved_output_tokens": 1024,
+      "output_reserve_fits_context": true,
+      "image_encoding_s": null,
+      "image_encoding_note": "Server prompt_ms combines vision encoding and prompt evaluation; separate duration unavailable in official server",
+      "slot": {
+        "confirmed": true,
+        "release_s": 0.01714670000365004
+      },
+      "id": "dev-05",
+      "pages": 1,
+      "input_sha256": [
+        "4ca548cd9cc43a98697d909f09863480acef8bf0a34da584f331129e50870c49"
+      ]
+    },
+    {
+      "ok": true,
+      "schema_valid": true,
+      "exact_match": true,
+      "parse_or_contract_error": false,
+      "finish_reason": "stop",
+      "cancelled": false,
+      "timed_out": false,
+      "timeout_type": null,
+      "received_content_chunks": 115,
+      "duration_s": 2.5311804999946617,
+      "first_token_s": 0.8830640999949537,
+      "probability_count": 115,
+      "all_probabilities_numeric": true,
+      "nonzero_raw_logprob_count": 34,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 1138,
+        "prompt_ms": 781.693,
+        "prompt_per_token_ms": 0.6869007029876977,
+        "prompt_per_second": 1455.8144949487842,
+        "predicted_n": 127,
+        "predicted_ms": 1645.596,
+        "predicted_per_token_ms": 13.060285714285714,
+        "predicted_per_second": 76.568003325239
+      },
+      "resources": {
+        "samples": 5,
+        "server_peak_rss_mib": 3047.828125,
+        "server_peak_private_mib": 4766.50390625,
+        "system_min_available_mib": 2394.47265625,
+        "gpu_peak_total_used_mib": 5094.0,
+        "gpu_capacity_mib": 6144.0
+      },
+      "evaluation": {
+        "requested_values": 5,
+        "exact_values": 5
+      },
+      "reserved_output_tokens": 1024,
+      "output_reserve_fits_context": true,
+      "image_encoding_s": null,
+      "image_encoding_note": "Server prompt_ms combines vision encoding and prompt evaluation; separate duration unavailable in official server",
+      "slot": {
+        "confirmed": true,
+        "release_s": 0.025866600044537336
+      },
+      "id": "dev-06",
+      "pages": 1,
+      "input_sha256": [
+        "17d35bce848bf0f0a231c45b97b45976f6146a016b74ce1d82ce133526224372"
+      ]
+    },
+    {
+      "ok": true,
+      "schema_valid": true,
+      "exact_match": true,
+      "parse_or_contract_error": false,
+      "finish_reason": "stop",
+      "cancelled": false,
+      "timed_out": false,
+      "timeout_type": null,
+      "received_content_chunks": 122,
+      "duration_s": 3.426486800017301,
+      "first_token_s": 1.731559899984859,
+      "probability_count": 122,
+      "all_probabilities_numeric": true,
+      "nonzero_raw_logprob_count": 15,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 2175,
+        "prompt_ms": 1605.742,
+        "prompt_per_token_ms": 0.7382721839080459,
+        "prompt_per_second": 1354.513987925831,
+        "predicted_n": 123,
+        "predicted_ms": 1692.127,
+        "predicted_per_token_ms": 13.869893442622951,
+        "predicted_per_second": 72.09860725583837
+      },
+      "resources": {
+        "samples": 6,
+        "server_peak_rss_mib": 3058.4609375,
+        "server_peak_private_mib": 4906.3828125,
+        "system_min_available_mib": 2386.88671875,
+        "gpu_peak_total_used_mib": 5040.0,
+        "gpu_capacity_mib": 6144.0
+      },
+      "evaluation": {
+        "requested_values": 6,
+        "exact_values": 6
+      },
+      "reserved_output_tokens": 1024,
+      "output_reserve_fits_context": true,
+      "image_encoding_s": null,
+      "image_encoding_note": "Server prompt_ms combines vision encoding and prompt evaluation; separate duration unavailable in official server",
+      "slot": {
+        "confirmed": true,
+        "release_s": 0.001399700006004423
+      },
+      "id": "dev-07",
+      "pages": 2,
+      "input_sha256": [
+        "cda0530d693375e0170393f43f0e6dc6dc6632dcda5124a259f0ff453444a172",
+        "cc9d3dc56f97c4e0f5c70ed42ebcd63a338886ec065de1c51fc4614cb71e4cc8"
+      ]
+    },
+    {
+      "ok": true,
+      "schema_valid": true,
+      "exact_match": true,
+      "parse_or_contract_error": false,
+      "finish_reason": "stop",
+      "cancelled": false,
+      "timed_out": false,
+      "timeout_type": null,
+      "received_content_chunks": 157,
+      "duration_s": 3.8614798999624327,
+      "first_token_s": 1.6732525000115857,
+      "probability_count": 157,
+      "all_probabilities_numeric": true,
+      "nonzero_raw_logprob_count": 35,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 2169,
+        "prompt_ms": 1581.032,
+        "prompt_per_token_ms": 0.7289220839096358,
+        "prompt_per_second": 1371.8887410248497,
+        "predicted_n": 158,
+        "predicted_ms": 2184.709,
+        "predicted_per_token_ms": 13.915343949044585,
+        "predicted_per_second": 71.86311769668181
+      },
+      "resources": {
+        "samples": 6,
+        "server_peak_rss_mib": 3075.328125,
+        "server_peak_private_mib": 4861.078125,
+        "system_min_available_mib": 2393.21484375,
+        "gpu_peak_total_used_mib": 5040.0,
+        "gpu_capacity_mib": 6144.0
+      },
+      "evaluation": {
+        "requested_values": 8,
+        "exact_values": 8
+      },
+      "reserved_output_tokens": 1024,
+      "output_reserve_fits_context": true,
+      "image_encoding_s": null,
+      "image_encoding_note": "Server prompt_ms combines vision encoding and prompt evaluation; separate duration unavailable in official server",
+      "slot": {
+        "confirmed": true,
+        "release_s": 0.021153099951334298
+      },
+      "id": "dev-08",
+      "pages": 2,
+      "input_sha256": [
+        "838930c026724bb610878ab29da401371c70d0478d67c0f5ae01908d7b8f8c0d",
+        "806f4b039c824982ebee9e3da4785e75e86d167d893b36b072b53dc285988eb7"
+      ]
+    },
+    {
+      "ok": true,
+      "schema_valid": true,
+      "exact_match": false,
+      "parse_or_contract_error": false,
+      "finish_reason": "stop",
+      "cancelled": false,
+      "timed_out": false,
+      "timeout_type": null,
+      "received_content_chunks": 107,
+      "duration_s": 2.283207100001164,
+      "first_token_s": 0.8804422000539489,
+      "probability_count": 107,
+      "all_probabilities_numeric": true,
+      "nonzero_raw_logprob_count": 32,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 1138,
+        "prompt_ms": 781.142,
+        "prompt_per_token_ms": 0.6864165202108964,
+        "prompt_per_second": 1456.8413937542725,
+        "predicted_n": 108,
+        "predicted_ms": 1400.201,
+        "predicted_per_token_ms": 13.085990654205608,
+        "predicted_per_second": 76.41760004456502
+      },
+      "resources": {
+        "samples": 4,
+        "server_peak_rss_mib": 3060.71484375,
+        "server_peak_private_mib": 4788.41015625,
+        "system_min_available_mib": 2442.5234375,
+        "gpu_peak_total_used_mib": 5039.0,
+        "gpu_capacity_mib": 6144.0
+      },
+      "evaluation": {
+        "requested_values": 5,
+        "exact_values": 3
+      },
+      "reserved_output_tokens": 1024,
+      "output_reserve_fits_context": true,
+      "image_encoding_s": null,
+      "image_encoding_note": "Server prompt_ms combines vision encoding and prompt evaluation; separate duration unavailable in official server",
+      "slot": {
+        "confirmed": true,
+        "release_s": 0.0011440999805927277
+      },
+      "id": "dev-09",
+      "pages": 1,
+      "input_sha256": [
+        "52d555d10279e04125375c5c32c7ff827894ad99acf64646ad6e12b87347a558"
+      ]
+    },
+    {
+      "ok": true,
+      "schema_valid": true,
+      "exact_match": true,
+      "parse_or_contract_error": false,
+      "finish_reason": "stop",
+      "cancelled": false,
+      "timed_out": false,
+      "timeout_type": null,
+      "received_content_chunks": 245,
+      "duration_s": 5.115668799960986,
+      "first_token_s": 1.682027799950447,
+      "probability_count": 245,
+      "all_probabilities_numeric": true,
+      "nonzero_raw_logprob_count": 26,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 2237,
+        "prompt_ms": 1588.989,
+        "prompt_per_token_ms": 0.710321412606169,
+        "prompt_per_second": 1407.8133958133128,
+        "predicted_n": 246,
+        "predicted_ms": 3428.754,
+        "predicted_per_token_ms": 13.994914285714286,
+        "predicted_per_second": 71.45452837969711
+      },
+      "resources": {
+        "samples": 9,
+        "server_peak_rss_mib": 3060.83203125,
+        "server_peak_private_mib": 4788.47265625,
+        "system_min_available_mib": 2411.0,
+        "gpu_peak_total_used_mib": 5039.0,
+        "gpu_capacity_mib": 6144.0
+      },
+      "evaluation": {
+        "requested_values": 12,
+        "exact_values": 12
+      },
+      "reserved_output_tokens": 1024,
+      "output_reserve_fits_context": true,
+      "image_encoding_s": null,
+      "image_encoding_note": "Server prompt_ms combines vision encoding and prompt evaluation; separate duration unavailable in official server",
+      "slot": {
+        "confirmed": true,
+        "release_s": 0.016348699980881065
+      },
+      "id": "dev-10",
+      "pages": 2,
+      "input_sha256": [
+        "64d935c531fc68a7c096f5e3cdbf0266d5caf4bdbfacd7ee51b6270660c18b2d",
+        "93d68a24facc1515d23ccc3bc02d14a0f4c091e3bc17961b988ce7bb9671f9f7"
+      ]
+    },
+    {
+      "ok": true,
+      "schema_valid": true,
+      "exact_match": true,
+      "parse_or_contract_error": false,
+      "finish_reason": "stop",
+      "cancelled": false,
+      "timed_out": false,
+      "timeout_type": null,
+      "received_content_chunks": 93,
+      "duration_s": 2.116873199993279,
+      "first_token_s": 0.8852665000013076,
+      "probability_count": 93,
+      "all_probabilities_numeric": true,
+      "nonzero_raw_logprob_count": 21,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 1138,
+        "prompt_ms": 790.721,
+        "prompt_per_token_ms": 0.6948339191564148,
+        "prompt_per_second": 1439.1928379289282,
+        "predicted_n": 94,
+        "predicted_ms": 1228.622,
+        "predicted_per_token_ms": 13.21098924731183,
+        "predicted_per_second": 75.69455861933125
+      },
+      "resources": {
+        "samples": 3,
+        "server_peak_rss_mib": 3035.171875,
+        "server_peak_private_mib": 4758.62109375,
+        "system_min_available_mib": 2440.484375,
+        "gpu_peak_total_used_mib": 5037.0,
+        "gpu_capacity_mib": 6144.0
+      },
+      "evaluation": {
+        "requested_values": 5,
+        "exact_values": 5
+      },
+      "reserved_output_tokens": 1024,
+      "output_reserve_fits_context": true,
+      "image_encoding_s": null,
+      "image_encoding_note": "Server prompt_ms combines vision encoding and prompt evaluation; separate duration unavailable in official server",
+      "slot": {
+        "confirmed": true,
+        "release_s": 0.0012021999573335052
+      },
+      "id": "dev-11",
+      "pages": 1,
+      "input_sha256": [
+        "756034afc1b0cd2621d0bb15f080a64ae6aa640b17b59e0aec1a751a461261a7"
+      ]
+    },
+    {
+      "ok": true,
+      "schema_valid": true,
+      "exact_match": false,
+      "parse_or_contract_error": false,
+      "finish_reason": "stop",
+      "cancelled": false,
+      "timed_out": false,
+      "timeout_type": null,
+      "received_content_chunks": 124,
+      "duration_s": 2.642937599972356,
+      "first_token_s": 0.8292145999730565,
+      "probability_count": 124,
+      "all_probabilities_numeric": true,
+      "nonzero_raw_logprob_count": 46,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 1137,
+        "prompt_ms": 784.439,
+        "prompt_per_token_ms": 0.689919964819701,
+        "prompt_per_second": 1449.443487638937,
+        "predicted_n": 139,
+        "predicted_ms": 1810.593,
+        "predicted_per_token_ms": 13.120239130434783,
+        "predicted_per_second": 76.21812301273671
+      },
+      "resources": {
+        "samples": 5,
+        "server_peak_rss_mib": 3030.74609375,
+        "server_peak_private_mib": 4755.6640625,
+        "system_min_available_mib": 2420.35546875,
+        "gpu_peak_total_used_mib": 5037.0,
+        "gpu_capacity_mib": 6144.0
+      },
+      "evaluation": {
+        "requested_values": 5,
+        "exact_values": 4
+      },
+      "reserved_output_tokens": 1024,
+      "output_reserve_fits_context": true,
+      "image_encoding_s": null,
+      "image_encoding_note": "Server prompt_ms combines vision encoding and prompt evaluation; separate duration unavailable in official server",
+      "slot": {
+        "confirmed": true,
+        "release_s": 0.023175599984824657
+      },
+      "id": "dev-12",
+      "pages": 1,
+      "input_sha256": [
+        "9f2e42bfdc681c8cea1ca878f960b1b4d3f32e6fbe416894c7df5584cb4dd226"
+      ]
+    }
+  ],
+  "manifest_sha256": "e19aaaea6879627e96badc03be920e8cac203f00141191553020722486480141",
+  "eligible_for_quality_measurement": false,
+  "notice": "Exploratory synthetic diagnostic; human review pending; no benchmark or calibration claims",
+  "load_s": 2.766563999990467,
+  "resources": {
+    "samples": 64,
+    "server_peak_rss_mib": 3075.328125,
+    "server_peak_private_mib": 4906.3828125,
+    "system_min_available_mib": 2386.88671875,
+    "gpu_peak_total_used_mib": 5094.0,
+    "gpu_capacity_mib": 6144.0
+  },
+  "stop_s": 0.39854800002649426
+}

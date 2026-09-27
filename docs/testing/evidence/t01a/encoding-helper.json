@@ -1,0 +1,149 @@
+{
+  "measurement_path": "llama-mtmd-cli helper, not server batching",
+  "measurements": [
+    {
+      "configuration": {
+        "id": "cpu-q8-512",
+        "vision": "cpu",
+        "kv": "q8_0",
+        "image_tokens": 512,
+        "context": 4096
+      },
+      "exit_code": 0,
+      "timeout": false,
+      "total_command_s": 10.35606950003421,
+      "image_encoding_ms": [
+        6718.0
+      ],
+      "input_sha256": "838930c026724bb610878ab29da401371c70d0478d67c0f5ae01908d7b8f8c0d",
+      "resources": {
+        "samples": 18,
+        "server_peak_rss_mib": 3744.515625,
+        "server_peak_private_mib": 4468.37109375,
+        "system_min_available_mib": 1545.4765625,
+        "gpu_peak_total_used_mib": 3892.0,
+        "gpu_capacity_mib": 6144.0
+      }
+    },
+    {
+      "configuration": {
+        "id": "gpu-q8-512",
+        "vision": "gpu",
+        "kv": "q8_0",
+        "image_tokens": 512,
+        "context": 4096
+      },
+      "exit_code": 0,
+      "timeout": false,
+      "total_command_s": 3.637474499992095,
+      "image_encoding_ms": [
+        193.0
+      ],
+      "input_sha256": "838930c026724bb610878ab29da401371c70d0478d67c0f5ae01908d7b8f8c0d",
+      "resources": {
+        "samples": 7,
+        "server_peak_rss_mib": 2951.51171875,
+        "server_peak_private_mib": 4589.21484375,
+        "system_min_available_mib": 2316.94921875,
+        "gpu_peak_total_used_mib": 4812.0,
+        "gpu_capacity_mib": 6144.0
+      }
+    },
+    {
+      "configuration": {
+        "id": "gpu-f16-512",
+        "vision": "gpu",
+        "kv": "f16",
+        "image_tokens": 512,
+        "context": 4096
+      },
+      "exit_code": 0,
+      "timeout": false,
+      "total_command_s": 3.5396771999658085,
+      "image_encoding_ms": [
+        195.0
+      ],
+      "input_sha256": "838930c026724bb610878ab29da401371c70d0478d67c0f5ae01908d7b8f8c0d",
+      "resources": {
+        "samples": 6,
+        "server_peak_rss_mib": 2953.21484375,
+        "server_peak_private_mib": 4861.984375,
+        "system_min_available_mib": 2390.8828125,
+        "gpu_peak_total_used_mib": 5082.0,
+        "gpu_capacity_mib": 6144.0
+      }
+    },
+    {
+      "configuration": {
+        "id": "cpu-f16-512",
+        "vision": "cpu",
+        "kv": "f16",
+        "image_tokens": 512,
+        "context": 4096
+      },
+      "exit_code": 0,
+      "timeout": false,
+      "total_command_s": 10.390834599966183,
+      "image_encoding_ms": [
+        6858.0
+      ],
+      "input_sha256": "838930c026724bb610878ab29da401371c70d0478d67c0f5ae01908d7b8f8c0d",
+      "resources": {
+        "samples": 18,
+        "server_peak_rss_mib": 3740.53125,
+        "server_peak_private_mib": 4731.6953125,
+        "system_min_available_mib": 1627.76953125,
+        "gpu_peak_total_used_mib": 4162.0,
+        "gpu_capacity_mib": 6144.0
+      }
+    },
+    {
+      "configuration": {
+        "id": "gpu-q8-256",
+        "vision": "gpu",
+        "kv": "q8_0",
+        "image_tokens": 256,
+        "context": 4096
+      },
+      "exit_code": 0,
+      "timeout": false,
+      "total_command_s": 3.3702042999793775,
+      "image_encoding_ms": [
+        128.0
+      ],
+      "input_sha256": "838930c026724bb610878ab29da401371c70d0478d67c0f5ae01908d7b8f8c0d",
+      "resources": {
+        "samples": 6,
+        "server_peak_rss_mib": 2861.625,
+        "server_peak_private_mib": 4228.29296875,
+        "system_min_available_mib": 2605.77734375,
+        "gpu_peak_total_used_mib": 4675.0,
+        "gpu_capacity_mib": 6144.0
+      }
+    },
+    {
+      "configuration": {
+        "id": "gpu-q8-1024",
+        "vision": "gpu",
+        "kv": "q8_0",
+        "image_tokens": 1024,
+        "context": 4096
+      },
+      "exit_code": 0,
+      "timeout": false,
+      "total_command_s": 3.9765294999815524,
+      "image_encoding_ms": [
+        368.0
+      ],
+      "input_sha256": "838930c026724bb610878ab29da401371c70d0478d67c0f5ae01908d7b8f8c0d",
+      "resources": {
+        "samples": 7,
+        "server_peak_rss_mib": 2919.7578125,
+        "server_peak_private_mib": 4653.53515625,
+        "system_min_available_mib": 2422.42578125,
+        "gpu_peak_total_used_mib": 4897.0,
+        "gpu_capacity_mib": 6144.0
+      }
+    }
+  ]
+}

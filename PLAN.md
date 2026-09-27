@@ -1,6 +1,15 @@
-# Preparation for Development
+# Development Plan
 
-Status: preparation is complete; the package was revised after the independent review of 2026-09-27, and document checks have passed. Implementation will not start in this session.
+Status: implementation authorized and active on 2026-09-27. T01a's technical transition condition is met; [STATUS](STATUS.md) and the [T01a report](docs/testing/T01A_REPORT.md) distinguish measured runtime feasibility from pending quality acceptance.
+
+## Current Execution Sequence
+
+1. T01b: implement the reusable recognition core, meaningful contract/failure tests, and tuning runner. Obtain the required human review of at least 20 tuning cases before calibration; freeze versions, prompts, signals, thresholds, and measured per-page times.
+2. T01c: prepare a separate reviewed sealed 40/20/10 benchmark and execute the frozen operating point. Follow ADR-0004's within-PC remediation order if it fails. Do not begin T02 before it passes.
+3. T02 through T08: follow the existing [roadmap](docs/planning/ROADMAP.md) and specifications, with logically complete verified local commits and a separate final quality pass.
+4. Defer final real-Telegram E2E and remote deployment per the user's current instruction. Record unavailable native Linux verification honestly; do not substitute Windows or WSL evidence.
+
+The rest of this file records the completed planning package. Its old session exclusions do not override the current development authorization.
 
 ## Prepared Results
 

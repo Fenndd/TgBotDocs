@@ -4,7 +4,19 @@ Updated: 2026-09-27.
 
 ## Current Stage
 
-**Post-review remediation of the planning package is complete (2026-09-27).** The next stage is [T01a: runtime feasibility on the current PC](specs/T01-recognition-baseline.md) as a separate development task. Application implementation has not started.
+**Implementation is active in T01.** T01a's technical transition condition is met on the current PC; see the [measured feasibility report](docs/testing/T01A_REPORT.md). T01b recognition-core implementation is starting. Human review of the synthetic development/tuning corpus remains pending; no accepted calibration or sealed benchmark has run. T02 is prohibited until T01c passes.
+
+## Current Development Evidence
+
+- The user authorized local implementation, dependencies, model downloads, tests, worktrees, and logical commits; no push, remote deployment, external inference, or final real-Telegram E2E is authorized. Linux hardware verification unavailable on this PC must remain explicitly deferred.
+- Work is isolated on `codex/local-product`; the original `main` checkout was clean and remains preserved. Fixture work was separately committed and integrated. Parallel independent changes use separate worktrees.
+- Official Qwen3-VL-4B Q4_K_M/FP16 mmproj and llama.cpp b11221 CUDA 12.4 artifacts were downloaded and hash-verified. Six serialized configurations, actual PDF renders, simulated JPEG paths, cancellation, timeout recovery, restart, context envelope, multilingual development diagnostics, and localization were measured. All content-free results and limits are linked from T01A_REPORT.
+- The measured starting profile is GPU vision, q8_0 K/V, context 4096, image maximum 1024, PDF 150 DPI. Two pages fit the probe prompt and 1024 output-token reserve; production prompts must calculate their own admission. The 12-case diagnostic matched 69/75 generated values, with Arabic and Devanagari differences; this is not an accepted quality result.
+- The 12-case gallery is local at `C:\Users\nikit\AppData\Local\TgBotDocs\t01a-fixtures-dev-v5\review.html`. A human review request is pending. Automatic visual review and deterministic generation do not satisfy the mandatory human-review procedure. Additional tuning and genuine photograph evidence remain required before quality acceptance.
+- Six measurement-harness tests pass. An independent Sol/high review found measurement issues that were fixed. Product-level supervision, contracts, calibration, and resilience are not yet verified.
+- Next: implement and verify the T01b production recognition core, prepare at least 20 tuning cases for review, calibrate only after the required review, freeze, then execute the sealed T01c gate. Never promote development/tuning originals or their variants to the benchmark.
+
+The planning and assistant-setup sections below are historical records from preceding tasks; statements about no implementation or commits refer to those tasks.
 
 ## Post-Review Remediation
 

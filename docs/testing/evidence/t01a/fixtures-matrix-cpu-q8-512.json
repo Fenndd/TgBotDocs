@@ -1,0 +1,233 @@
+{
+  "mode": "matrix",
+  "configuration": {
+    "id": "cpu-q8-512",
+    "vision": "cpu",
+    "kv": "q8_0",
+    "image_tokens": 512,
+    "context": 4096
+  },
+  "requests": [
+    {
+      "ok": true,
+      "schema_valid": true,
+      "exact_match": true,
+      "parse_or_contract_error": false,
+      "finish_reason": "stop",
+      "cancelled": false,
+      "timed_out": false,
+      "timeout_type": null,
+      "received_content_chunks": 85,
+      "duration_s": 8.550801000033971,
+      "first_token_s": 7.428538600041065,
+      "probability_count": 85,
+      "all_probabilities_numeric": true,
+      "nonzero_raw_logprob_count": 20,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 633,
+        "prompt_ms": 7383.012,
+        "prompt_per_token_ms": 11.66352606635071,
+        "prompt_per_second": 85.73736572553317,
+        "predicted_n": 86,
+        "predicted_ms": 1119.995,
+        "predicted_per_token_ms": 13.17641176470588,
+        "predicted_per_second": 75.89319595176765
+      },
+      "resources": {
+        "samples": 14,
+        "server_peak_rss_mib": 3759.2578125,
+        "server_peak_private_mib": 4492.3203125,
+        "system_min_available_mib": 1794.109375,
+        "gpu_peak_total_used_mib": 4013.0,
+        "gpu_capacity_mib": 6144.0
+      },
+      "evaluation": {
+        "requested_values": 4,
+        "exact_values": 4
+      },
+      "reserved_output_tokens": 1024,
+      "output_reserve_fits_context": true,
+      "image_encoding_s": null,
+      "image_encoding_note": "Server prompt_ms combines vision encoding and prompt evaluation; separate duration unavailable in official server",
+      "slot": {
+        "confirmed": true,
+        "release_s": 0.023479799972847104
+      },
+      "id": "pdf_render-150",
+      "pages": 1,
+      "input_sha256": [
+        "838930c026724bb610878ab29da401371c70d0478d67c0f5ae01908d7b8f8c0d"
+      ]
+    },
+    {
+      "ok": true,
+      "schema_valid": true,
+      "exact_match": true,
+      "parse_or_contract_error": false,
+      "finish_reason": "stop",
+      "cancelled": false,
+      "timed_out": false,
+      "timeout_type": null,
+      "received_content_chunks": 85,
+      "duration_s": 8.538815999985673,
+      "first_token_s": 7.430701599980239,
+      "probability_count": 85,
+      "all_probabilities_numeric": true,
+      "nonzero_raw_logprob_count": 21,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 633,
+        "prompt_ms": 7373.216,
+        "prompt_per_token_ms": 11.64805055292259,
+        "prompt_per_second": 85.8512757526702,
+        "predicted_n": 86,
+        "predicted_ms": 1105.78,
+        "predicted_per_token_ms": 13.009176470588235,
+        "predicted_per_second": 76.86881658196025
+      },
+      "resources": {
+        "samples": 14,
+        "server_peak_rss_mib": 3758.7421875,
+        "server_peak_private_mib": 4499.49609375,
+        "system_min_available_mib": 1805.7578125,
+        "gpu_peak_total_used_mib": 4049.0,
+        "gpu_capacity_mib": 6144.0
+      },
+      "evaluation": {
+        "requested_values": 4,
+        "exact_values": 4
+      },
+      "reserved_output_tokens": 1024,
+      "output_reserve_fits_context": true,
+      "image_encoding_s": null,
+      "image_encoding_note": "Server prompt_ms combines vision encoding and prompt evaluation; separate duration unavailable in official server",
+      "slot": {
+        "confirmed": true,
+        "release_s": 0.0230034000123851
+      },
+      "id": "pdf_render-200",
+      "pages": 1,
+      "input_sha256": [
+        "e0af6018dfe35c62981fb56cdaa853efa424e4881a3cad1378479ad33d10eb09"
+      ]
+    },
+    {
+      "ok": true,
+      "schema_valid": true,
+      "exact_match": true,
+      "parse_or_contract_error": false,
+      "finish_reason": "stop",
+      "cancelled": false,
+      "timed_out": false,
+      "timeout_type": null,
+      "received_content_chunks": 208,
+      "duration_s": 10.643078099994455,
+      "first_token_s": 7.755130999954417,
+      "probability_count": 208,
+      "all_probabilities_numeric": true,
+      "nonzero_raw_logprob_count": 22,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 723,
+        "prompt_ms": 7717.915,
+        "prompt_per_token_ms": 10.67484785615491,
+        "prompt_per_second": 93.67815012215087,
+        "predicted_n": 209,
+        "predicted_ms": 2884.683,
+        "predicted_per_token_ms": 13.868668269230769,
+        "predicted_per_second": 72.1049765260169
+      },
+      "resources": {
+        "samples": 18,
+        "server_peak_rss_mib": 3793.80859375,
+        "server_peak_private_mib": 4495.39453125,
+        "system_min_available_mib": 1729.140625,
+        "gpu_peak_total_used_mib": 4058.0,
+        "gpu_capacity_mib": 6144.0
+      },
+      "evaluation": {
+        "requested_values": 10,
+        "exact_values": 10
+      },
+      "reserved_output_tokens": 1024,
+      "output_reserve_fits_context": true,
+      "image_encoding_s": null,
+      "image_encoding_note": "Server prompt_ms combines vision encoding and prompt evaluation; separate duration unavailable in official server",
+      "slot": {
+        "confirmed": true,
+        "release_s": 0.024914200010243803
+      },
+      "id": "simulated_telegram_photo_1280-None",
+      "pages": 1,
+      "input_sha256": [
+        "e500e2e0b36dff5d2ed73998cb5f8c052109b42c01a7db755d78ce01d2bdbf48"
+      ]
+    },
+    {
+      "ok": true,
+      "schema_valid": true,
+      "exact_match": true,
+      "parse_or_contract_error": false,
+      "finish_reason": "stop",
+      "cancelled": false,
+      "timed_out": false,
+      "timeout_type": null,
+      "received_content_chunks": 208,
+      "duration_s": 10.45495350001147,
+      "first_token_s": 7.646248700038996,
+      "probability_count": 208,
+      "all_probabilities_numeric": true,
+      "nonzero_raw_logprob_count": 21,
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 723,
+        "prompt_ms": 7561.598,
+        "prompt_per_token_ms": 10.458641770401107,
+        "prompt_per_second": 95.61471001235452,
+        "predicted_n": 209,
+        "predicted_ms": 2805.057,
+        "predicted_per_token_ms": 13.48585096153846,
+        "predicted_per_second": 74.1517908548739
+      },
+      "resources": {
+        "samples": 17,
+        "server_peak_rss_mib": 3761.56640625,
+        "server_peak_private_mib": 4461.30078125,
+        "system_min_available_mib": 1745.3671875,
+        "gpu_peak_total_used_mib": 4068.0,
+        "gpu_capacity_mib": 6144.0
+      },
+      "evaluation": {
+        "requested_values": 10,
+        "exact_values": 10
+      },
+      "reserved_output_tokens": 1024,
+      "output_reserve_fits_context": true,
+      "image_encoding_s": null,
+      "image_encoding_note": "Server prompt_ms combines vision encoding and prompt evaluation; separate duration unavailable in official server",
+      "slot": {
+        "confirmed": true,
+        "release_s": 0.02137519995449111
+      },
+      "id": "simulated_telegram_photo_2560-None",
+      "pages": 1,
+      "input_sha256": [
+        "0ab1627b204343bc2760ddc66746f66422ef33e444820596f6650b324189fd88"
+      ]
+    }
+  ],
+  "manifest_sha256": "e19aaaea6879627e96badc03be920e8cac203f00141191553020722486480141",
+  "eligible_for_quality_measurement": false,
+  "notice": "Exploratory synthetic diagnostic; human review pending; no benchmark or calibration claims",
+  "load_s": 2.674643600010313,
+  "resources": {
+    "samples": 68,
+    "server_peak_rss_mib": 3793.80859375,
+    "server_peak_private_mib": 4499.49609375,
+    "system_min_available_mib": 1729.140625,
+    "gpu_peak_total_used_mib": 4068.0,
+    "gpu_capacity_mib": 6144.0
+  },
+  "stop_s": 0.4388181999674998
+}

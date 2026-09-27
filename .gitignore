@@ -11,3 +11,8 @@ CLAUDE.local.md
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Isolated exploratory T01 environment; models and measurements live outside Git.
+.venv-t01a/
+__pycache__/
+.pytest_cache/

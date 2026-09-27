@@ -1,6 +1,6 @@
 # T01 — Direct Recognition Check on the Current PC
 
-Status: ready for implementation as three consecutive development tasks, T01a, T01b, and T01c. Date: 2026-09-27; revised after the independent review. No experiment is run in the planning session.
+Status: implementation active, 2026-09-27. T01a's technical transition condition is met ([report](../docs/testing/T01A_REPORT.md)); human development/tuning-corpus review remains pending. T01b core implementation is starting; calibration and T01c have not run. The requirements below remain the accepted stage sequence and criteria.
 
 ## Goal and Basis
 
