@@ -68,7 +68,8 @@ async def run(args):
         adapter = MeasuredAdapter(runtime.adapter_settings, restart=runtime.restart)
         try:
             core = RecognitionCore(adapter, CoreSettings(runtime=runtime_profile,
-                verification=VerificationPolicy(check_alternate_view=args.alternate), matching_margin=.1))
+                verification=VerificationPolicy(check_alternate_view=args.alternate), matching_margin=.1,
+                compute_alternate_view=args.alternate))
             with tempfile.TemporaryDirectory(prefix="tgbotdocs-core-smoke-") as directory:
                 result = await core.recognize(tuple(root / name for name in case["inputs"]), (profile,),
                                               scratch=Path(directory), selected_profile=profile if args.manual else None)

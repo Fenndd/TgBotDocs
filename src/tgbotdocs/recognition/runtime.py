@@ -166,6 +166,11 @@ class LocalRuntime:
         self._lifecycle = asyncio.Lock()
 
     @property
+    def pid(self) -> int | None:
+        """Process ID of the running server, for content-free resource sampling only."""
+        return None if self._process is None else self._process.pid
+
+    @property
     def adapter_settings(self):
         return AdapterSettings(endpoint=f"http://127.0.0.1:{self.port}", api_key=self._key)
 

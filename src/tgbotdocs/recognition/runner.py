@@ -132,8 +132,7 @@ async def open_core(data_root: Path, settings):
     async with LocalRuntime(runtime_files(data_root), settings.runtime) as runtime:
         adapter = ModelAdapter(runtime.adapter_settings, restart=runtime.restart)
         try:
-            # LocalRuntime exposes no public PID; read it for RSS sampling only.
-            yield RecognitionCore(adapter, settings), lambda: getattr(getattr(runtime, "_process", None), "pid", None)
+            yield RecognitionCore(adapter, settings), lambda: runtime.pid
         finally:
             await adapter.close()
 

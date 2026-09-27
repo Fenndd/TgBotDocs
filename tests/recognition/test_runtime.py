@@ -99,3 +99,14 @@ async def test_windows_job_close_terminates_owned_process():
         if process.returncode is None:
             process.kill()
             await process.wait()
+
+
+def test_pid_is_exposed_only_while_a_child_process_is_owned():
+    server = runtime()
+    assert server.pid is None
+
+    class Child:
+        pid = 4242
+
+    server._process = Child()
+    assert server.pid == 4242

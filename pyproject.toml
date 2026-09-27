@@ -15,6 +15,11 @@ dependencies = [
   "psutil==7.2.2",
 ]
 
+[project.scripts]
+tgbotdocs-recognize = "tgbotdocs.recognition.runner:main"
+tgbotdocs-corpus = "tgbotdocs.recognition.corpus_cli:main"
+tgbotdocs-benchmark = "tgbotdocs.recognition.benchmark:main"
+
 [dependency-groups]
 dev = [
     "hypothesis>=6.168.2",
