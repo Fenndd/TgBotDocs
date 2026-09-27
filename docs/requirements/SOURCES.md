@@ -69,6 +69,27 @@ This is not permission to install models, begin implementation, or purchase a se
 - **S-09-A2:** The following test set was accepted: 40 readable documents, 20 challenging photographs, 10 negative cases. Zero incorrectly accepted values/profiles on the set; at least 90% of requested fields/cells in the readable portion. Failure requires improvement/review with the developer, without promising 100% accuracy on any future documents.
 - **S-09-A3:** Target platforms are Windows and Linux x86-64 with an NVIDIA GPU. The delivery includes reproducible launch, configuration, migrations, and licenses; both platforms are checked before handover. The specific server/scaling comes later, with no purchase/configuration now.
 
+## S-10 — Decision Authority, 2026-09-27
+
+Direct developer statement after the independent pre-development review:
+
+- **S-10-A1:** The original customer provided the core product idea and the initial requirements (S-01). From this point onward, the developer makes all product, architecture, implementation, and engineering decisions; additional customer approval is not required unless the developer explicitly says otherwise.
+- **S-10-A2:** Where documents refer to customer or developer approval, or leave final authority unclear, the developer is the final decision-maker.
+- **S-10-A3:** The core purpose and explicit constraints of the original brief are preserved unless the developer explicitly decides to change them.
+- **S-10-A4:** Purely technical details that follow from the requirements, constraints, and engineering practice are decided by the implementing agent and documented with their reasoning. They are not presented as developer answers, and the developer can override them.
+
+## S-11 — T01 Escalation Path, 2026-09-27
+
+- **S-11-A1:** If T01 shows that the selected configuration does not meet the accepted criteria on the current PC, remediation stays within this PC's hardware (6 GiB VRAM, 16 GiB RAM): configuration tuning, abstention and verification signals, a local OCR cross-check, and other self-hosted models that fit this hardware. Moving inference to a stronger model on a separate GPU server is not a permitted escalation path. Once these options are exhausted, narrowing the v1 scope or revising the acceptance criteria requires a separate explicit developer decision.
+
+## S-12 — Scheduling Between Documents, 2026-09-27
+
+- **S-12-A1:** When several documents are active, the GPU alternates between them: after each model call, the next active document gets a turn, so short documents are not blocked by a long one. The accepted consequence: under load, a long document takes longer in wall-clock time and keeps its temporary files longer, while its 30-minute budget counts only its own processing.
+
+## S-13 — Profile Changes During Processing, 2026-09-27
+
+- **S-13-A1:** Profiles can be edited while the user's document is queued or being processed, but not while the bot waits for the user's answer about that document. An edit does not affect a document already in progress, which keeps its snapshot of the profiles. A question about the document waits until an open profile draft is saved or cancelled. This replaces the earlier engineering choice of read-only Settings during a whole job (ED-004).
+
 ## E-01 — Hardware Check
 
 Only hardware specifications were read using Windows CIM and `nvidia-smi`, on 2026-09-27:
@@ -82,4 +103,4 @@ These are specifications, not benchmark results. Models were not run; the suitab
 
 ## Recording Rule
 
-Direct requirements are preserved in meaning. Proposals are marked as proposals. Accepted decisions include their rationale and consequences; significant architectural choices are recorded as ADRs. No answer does not mean agreement. The current explicit instruction takes precedence over the old idea.
+Direct requirements are preserved in meaning. Proposals are marked as proposals. Accepted decisions include their rationale and consequences; significant architectural choices are recorded as ADRs. No answer does not mean agreement. The current explicit instruction takes precedence over the old idea. Engineering decisions made under S-10-A4 are labeled ED in the [decision register](OPEN_QUESTIONS.md).

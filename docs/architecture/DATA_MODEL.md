@@ -1,27 +1,28 @@
 # Data Model
 
-Status: v1 model for personal profiles and temporary documents. Field types are in [contracts](CONTRACTS.md); waiting rules are in the [operating model](../operations/OPERATIONS.md).
+Status: v1 model for personal profiles and temporary documents; profile storage simplified on 2026-09-27 (ED-007). Field types are in [contracts](CONTRACTS.md); states and timers are in the [state machine](STATE_MACHINE.md) and the [operating model](../operations/OPERATIONS.md).
 
 ## Persistent PostgreSQL Data
 
 | Entity | Contents | Invariants |
 | --- | --- | --- |
 | User | Telegram user ID, creation time | The identifier is needed as the profile owner; name, phone number, and username are not needed |
-| ExtractionProfile | UUID, owner ID, reference to the current revision, dates | Always belongs to one user; is not a global document type |
-| ProfileRevision | profile ID, version, name, description of applicable documents, original instruction, field schema, additional guidance, time | The entire revision is immutable after saving; matching and extraction use the same snapshot |
+| ExtractionProfile | UUID, owner ID, version number, name, description of applicable documents, original instruction, field schema with optional validators, additional guidance, creation and update times | Always belongs to one user; is not a global document type; the version number increases with every saved change |
 | Schema migration | Database schema version | Migrations are reproducible and do not require copying documents |
 
-Updating a profile and switching its revision are performed in one transaction. Before job matching, a snapshot of candidate revisions is fixed; a model response with an ID is bound specifically to the revision passed in. The same revision is shown during clarification. Later edits do not change the scope or fields of the current job.
+A profile change is saved only if the version the user previewed is still current (optimistic concurrency): the update succeeds only when the stored version equals the previewed one, and it increments the version in the same transaction. A stale preview does not overwrite a newer change: the bot asks the user to open the current profile. Drafts produced from one instruction (ED-001) are inserted in one transaction: all or none. Repeated confirmation of the same preview does not create duplicates.
 
-A stale preview conflict does not overwrite a newer change: the bot asks the user to open the current profile. Deleting a profile deletes its saved revisions; an already assigned job finishes with its temporary snapshot or is canceled by the user. If a profile is deleted before assignment, the selection is refreshed and clarified without silently applying the deleted configuration. Separate deactivation is not introduced in v1.
+Previous versions are not retained. No feature reads profile history, and keeping old versions would preserve text that the user deliberately removed. A job uses immutable in-memory snapshots of the candidate profiles, taken before matching; the model response is bound to that snapshot, the same snapshot is shown during clarification, and later database changes do not affect the job. Jobs do not survive a restart, so snapshots need no persistent storage.
 
-Saved configuration revisions remain until the profile is deleted. An unconfirmed draft is stored only in RAM until Cancel/restart or 15 minutes of inactivity. A dedicated operation to delete document history is not needed: there is no persistent history.
+Profiles can be changed while a document job is queued or being processed, but not while the job waits for the user's answer (S-13-A1). A job takes its snapshot when its matching starts; a later change or deletion affects only later documents, and a job already assigned to a deleted profile finishes with its snapshot. A profile created for the current document inside the job flow is saved the same way and applied to that document as user-selected. Deleting a profile deletes its row. Separate deactivation is not introduced in v1.
+
+An unconfirmed draft is stored only in RAM until Cancel, restart, the end of its job, or 15 minutes of inactivity. A dedicated operation to delete document history is not needed: there is no persistent history.
 
 For the login option that lasts until restart, the authenticated session and password are not stored in the database. The password comes from local configuration; it must not be stored in documentation.
 
 ## Temporary Job Data
 
-In RAM: authenticated sessions, dialogue, file list and their temporary Telegram IDs, queue, selected profile revision, candidate fields, results, and delivery states. On disk: originals and prepared pages in a separate job directory with a random name. Original filenames are not used as paths.
+In RAM: authenticated sessions, dialogue, file list and their temporary Telegram IDs, queue, profile snapshots, candidate fields, verification-signal values, results, and delivery states. On disk: originals and prepared pages in a separate job directory with a random name. Original filenames are not used as paths. Pages are rendered per batch and deleted after use ([CONTRACTS](CONTRACTS.md)).
 
 `Submission` contains one logical document made up of files; a PDF file may contain multiple pages. The order is determined by the order in which files are sent, and within a PDF by page order. An album is ordered by message ID. A stable page ID preserves the file/page correspondence and does not change during re-preparation.
 

@@ -1,8 +1,8 @@
 # Telegram Bot for Extracting Data from Documents
 
-Stage: planning is complete; the next step is implementation of T01. The bot receives documents in Telegram and returns only the data requested in the user's personal text settings. The first version accepts arbitrary documents in any languages, with an honest refusal when they cannot be read; processing is local. The completed product is intended to be delivered to the customer.
+Stage: planning is complete and was revised after an independent review on 2026-09-27; the next step is T01a. The bot receives documents in Telegram and returns only the data requested in the user's personal text settings. The first version accepts arbitrary documents in any languages, with an honest refusal when they cannot be read; processing is local and must fit the current PC's hardware. The completed product is intended to be delivered to the customer.
 
-The selected stack is Python + aiogram + PostgreSQL and a direct local Qwen3-VL-4B-Instruct Q4_K_M through llama.cpp. The next task is [T01: testing recognition on the current PC](specs/T01-recognition-baseline.md). No source code, dependencies, or infrastructure are being created in this session; model quality has not yet been tested.
+The selected stack is Python + aiogram + PostgreSQL and a direct local Qwen3-VL-4B-Instruct Q4_K_M through llama.cpp. The next task is [T01a: runtime feasibility on the current PC](specs/T01-recognition-baseline.md). No source code, dependencies, or infrastructure are being created in this session; model quality has not yet been tested.
 
 ## Navigation
 
@@ -14,7 +14,7 @@ The selected stack is Python + aiogram + PostgreSQL and a direct local Qwen3-VL-
 | [Sources](docs/requirements/SOURCES.md) | Requirement provenance and boundaries of available context |
 | [Open Questions](docs/requirements/OPEN_QUESTIONS.md) | Options, recommendations, and user decisions |
 | [Architecture](docs/architecture/ARCHITECTURE.md) | Agreed boundaries, components, and technical decisions |
-| [Contracts](docs/architecture/CONTRACTS.md), [data](docs/architecture/DATA_MODEL.md) | Profiles, pages, fields/lists, states, persistent and temporary data |
+| [Contracts](docs/architecture/CONTRACTS.md), [data](docs/architecture/DATA_MODEL.md), [state machine](docs/architecture/STATE_MACHINE.md) | Profiles, pages, fields/lists, merging, persistent and temporary data, dialogue and job states, timers, scheduling |
 | [Decisions](docs/decisions/README.md) | ADRs: rationale, options, and consequences |
 | [Security](docs/security/SECURITY.md) | Data processing and storage boundaries |
 | [Verification](docs/testing/TEST_STRATEGY.md) | Acceptance scenarios and quality checks |

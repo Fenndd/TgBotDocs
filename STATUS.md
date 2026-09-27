@@ -4,13 +4,27 @@ Updated: 2026-09-27.
 
 ## Current Stage
 
-**Planning is complete.** The next stage is the specific implementation of [T01: testing direct recognition on the current PC](specs/T01-recognition-baseline.md). Subsequent development-assistant setup is recorded below; application implementation has not started.
+**Post-review remediation of the planning package is complete (2026-09-27).** The next stage is [T01a: runtime feasibility on the current PC](specs/T01-recognition-baseline.md) as a separate development task. Application implementation has not started.
+
+## Post-Review Remediation
+
+An independent pre-development review on 2026-09-27 was delivered in chat and is not stored as a separate file. Its findings were resolved in the planning documents:
+
+- Developer decisions: [S-10](docs/requirements/SOURCES.md) — the developer is the final decision-maker; S-11 — if T01 fails, remediation stays on the current PC's hardware, and a stronger GPU server is not a v1 escalation path; S-12 — active documents take turns on the GPU, one model call each; S-13 — profiles can be edited while a document is queued or processed, but not while it waits for the user's answer (supersedes ED-004).
+- Engineering decisions ED-001–ED-013 in the [decision register](docs/requirements/OPEN_QUESTIONS.md), with ED-004 superseded; [ADR-0004](docs/decisions/ADR-0004-abstention-and-verification.md) (downgrade-only verification layer, calibration, remediation order) and [ADR-0005](docs/decisions/ADR-0005-runtime-supervision-and-packaging.md) (child-process supervision, streaming cancellation, synchronous database access, packaging, toolchain).
+- New [STATE_MACHINE](docs/architecture/STATE_MACHINE.md): the single reference for sessions, jobs, timers, scheduler, admission, restart, and cleanup.
+- Revised: PRODUCT_SPEC (REQ-014, REQ-021), CONTRACTS, DATA_MODEL, USER_FLOWS, OPERATIONS, SECURITY, ARCHITECTURE, RECOGNITION_OPTIONS, ACCEPTANCE_PLAN, TEST_STRATEGY, ROADMAP, clarifications in ADR-0001–ADR-0003, specifications T01–T08 and their index, README, and PLAN.
+- Checks passed: internal links, Markdown table structure, UTF-8/LF/final newline, 32 unique requirement IDs, a search for superseded terms, and `git diff --check`. External facts used in the new ADRs were checked against official sources on 2026-09-27: the Telegram Bot API and file documentation, the llama.cpp server README, issues, and Docker documentation, the Qwen3-VL-4B configuration, psycopg, the Python asyncio and version documentation, and aiogram.
+- Second completeness pass: every review finding was traced to the changed documents. Gaps closed: the definition of user activity; budget-exhaustion and failure transitions in every processing state; download, file, and quota errors during collection; behavior while the database or runtime is unavailable; Telegram's 64-byte callback-data limit; `.env` wording; a startup alert instead of a health endpoint; reuse of the T01a development set for tuning; and the current PC booted into Linux as a T08 host option. The global password pause was replaced by an operator alert, because it would let anyone block new sign-ins, while a leaked password exposes compute but no other user's data.
+- Not verified: every runtime property the design relies on — VRAM envelope, streaming cancellation, token probabilities with images and schema — is measured in T01a.
+- Open but not blocking: the Linux verification host for T08, where the current PC booted into Linux qualifies; the customer's workload and SLA, deferred by the developer.
+- The `AGENTS.md` rule, the skill-setup bullet below, and `docs/learning/` belong to a separate session and were not changed.
 
 ## Prepared
 
-- 32 requirements with sources; six rounds of direct developer answers are preserved in [SOURCES](docs/requirements/SOURCES.md).
-- User flows, contracts, data model, security, operating parameters, and acceptance criteria.
-- Three ADRs: local processing; Python/aiogram/PostgreSQL and Telegram; direct Qwen3-VL-4B Q4_K_M through llama.cpp.
+- 32 requirements with sources; six rounds of direct developer answers and the S-10/S-11 decisions are preserved in [SOURCES](docs/requirements/SOURCES.md).
+- User flows, contracts, data model, state machine, security, operating parameters, and acceptance criteria.
+- Five ADRs: local processing; Python/aiogram/PostgreSQL and Telegram; direct Qwen3-VL-4B Q4_K_M through llama.cpp; verification layer; runtime supervision and packaging.
 - [Roadmap](docs/planning/ROADMAP.md) and [eight individual specifications](specs/README.md) with dependencies and checks.
 - The empty file for a copy of the task was removed; external TT.txt was not copied or changed.
 
@@ -34,6 +48,8 @@ The requested parameters are stated; the tool did not separately confirm the sub
 
 ## Development-Assistant Setup After Planning
 
+- Added a task-start rule to [AGENTS.md](AGENTS.md): consider applicable instructions and the available project-local/user-global skill catalog, fully read selected skill entrypoints and canonical instructions, and load supporting materials selectively. The rule avoids a manually maintained skill inventory and routine full-directory scans; it does not change discovery settings or guarantee model compliance. The ongoing teaching checklist is in [SESSION_UNDERSTANDING](docs/learning/SESSION_UNDERSTANDING.md).
+
 - Added the project-local [session-teacher skill](.agents/skills/session-teacher/SKILL.md) from [ThariqS's gist](https://gist.github.com/ThariqS/1389dcdff9eba4789887a2211370f06b), with the original text preserved in its references. The entrypoint adds required skill metadata and adapts `AskUserQuestion` and `/goal` to Codex. It supports guided teaching with a comprehension checklist; installation does not start a lesson. Basic structure, source preservation, and links were checked; the standard validator is unavailable because PyYAML is missing, and runtime invocation remains unverified.
 - Installed project-local `security-best-practices` and `security-threat-model` skills from `openai/skills` in a preceding task; their files were preserved during the routing update.
 - Added the project-local [model-routing skill](.agents/skills/model-routing/SKILL.md) and updated [AI_ORCHESTRATION](docs/engineering/AI_ORCHESTRATION.md) with task-based model/effort selection, bounded reading, direct file generation, and verifiable reports. `AGENTS.md` points Codex to the skill for substantial delegation.
@@ -53,8 +69,8 @@ The requested parameters are stated; the tool did not separately confirm the sub
 
 ## Not Verified and Next Steps
 
-Model suitability, accuracy, RAM/VRAM, and speed have not yet been tested — this is the scope of T01 with the accepted criteria: 40 readable + 20 difficult + 10 negative cases; zero incorrectly accepted values/profiles and at least 90% completeness on the readable portion.
+Model suitability, accuracy, RAM/VRAM, and speed have not yet been tested. This is the scope of T01: T01a measures runtime feasibility; T01b calibrates the recognition core on the tuning set; T01c runs the sealed benchmark with the accepted criteria: 40 readable + 20 difficult + 10 negative cases, zero incorrectly accepted values/profiles, and at least 90% completeness on the readable portion. On failure, remediation stays on the current PC (ADR-0004).
 
-There are no actual application test commands yet. Compatibility of exact dependencies/the lockfile is checked in T01/T02; the end-to-end product in T06/T07; Windows and Linux x86-64/NVIDIA in T08. The customer's specific server and workload have deliberately been deferred.
+There are no actual application test commands yet. Compatibility of exact dependencies/the lockfile is checked in T01b/T02; the end-to-end product in T06/T07; Windows (native) and Linux x86-64/NVIDIA (container, on a native Linux host still to be provided) in T08. The customer's specific server and workload have deliberately been deferred.
 
 No commits, pushes, external submissions, publication, or deployment were carried out in this task. Implementation must not start automatically because planning is complete: a separate development task is required.

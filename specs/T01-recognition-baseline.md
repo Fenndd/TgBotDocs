@@ -1,42 +1,55 @@
 # T01 — Direct Recognition Check on the Current PC
 
-Status: ready for implementation as a separate next task. Date: 2026-09-27. This is the first technical development task; no experiment is run in the planning session.
+Status: ready for implementation as three consecutive development tasks, T01a, T01b, and T01c. Date: 2026-09-27; revised after the independent review. No experiment is run in the planning session.
 
 ## Goal and Basis
 
-Check the user-selected Qwen3-VL-4B-Instruct GGUF Q4_K_M through local llama.cpp on the current PC. Obtain measurements of memory, time, and direct extraction quality from original pages before building the product around the model.
+Check the user-selected Qwen3-VL-4B-Instruct GGUF Q4_K_M through local llama.cpp on the current PC, and decide on measurements whether to build the product around it. Basis: [PRODUCT_SPEC](../docs/requirements/PRODUCT_SPEC.md), REQ-002/005/007/011–014/016/022/031; [ADR-0003](../docs/decisions/ADR-0003-direct-local-vlm.md); [ADR-0004](../docs/decisions/ADR-0004-abstention-and-verification.md); [ACCEPTANCE_PLAN](../docs/testing/ACCEPTANCE_PLAN.md); [CONTRACTS](../docs/architecture/CONTRACTS.md). The user selected the model and the direct path in the fourth round (S-07-A2); remediation after a failure stays on this PC (S-11-A1).
 
-Basis: [PRODUCT_SPEC](../docs/requirements/PRODUCT_SPEC.md), REQ-002/005/007/011–014/016/022; [recognition options and hardware](../docs/architecture/RECOGNITION_OPTIONS.md); [test strategy](../docs/testing/TEST_STRATEGY.md). The user selected the model and direct path in the fourth round; alternatives are not a mandatory part of T01.
+## Common Boundaries
 
-## Scope and Dependencies
+- Windows 11 Home x64, Ryzen 5 5600H, 16 GiB RAM (about 13.9 GiB available to the OS), RTX 3060 Laptop GPU with 6 GiB VRAM. Do not count OS memory as free process memory.
+- One GPU task at a time; measurements are serialized.
+- Processing stays local; document information is not sent to external AI services, logs, or backup. Use synthetic or permitted examples; do not retain real originals as a benchmark corpus without a separate basis. Personal-data handling and deletion comply with [SECURITY](../docs/security/SECURITY.md).
+- Versions, hashes, and parameters are recorded as they are used; nothing is invented in advance. Commands are added only after they have run.
 
-- Direct visual input: an image or images of PDF pages and an extraction instruction. Do not introduce a mandatory separate OCR.
-- Windows 11 Home x64, 16 GiB RAM (about 13.9 GiB available to the OS), RTX 3060 Laptop GPU 6 GiB VRAM. Do not count OS memory as free process memory.
-- One GPU task at a time. First measure one configuration without competing recognition.
-- Prepare materials and independent ground truth according to the accepted [ACCEPTANCE_PLAN](../docs/testing/ACCEPTANCE_PLAN.md): 40 readable + 20 difficult + 10 negative cases, zero incorrectly accepted values/profiles, and ≥90% completeness for readable fields/cells. Contract — [CONTRACTS](../docs/architecture/CONTRACTS.md). The set and criteria do not need to be agreed again; specific ground truth is reviewed by a person before the benchmark measurement.
-- Specific versions of llama.cpp, weights, and the vision component are needed, as well as image, context, and generation parameters. These are recorded during implementation; versions are not invented now.
-- Use synthetic/permitted examples for the experiment; personal-data handling and deletion must comply with [SECURITY](../docs/security/SECURITY.md). Do not retain real originals as a benchmark corpus without a separate basis.
+## T01a — Runtime Feasibility
 
-## Expected Result and Sequence
+Scope: a pinned llama.cpp build (release or commit, CUDA version, driver) and the official GGUF and mmproj files with SHA-256 hashes, launched with the profile in [OPERATIONS](../docs/operations/OPERATIONS.md). No application code.
 
-1. Record artifact versions/hashes, license, CPU/GPU configuration, vision component, and baseline memory usage. Explain the selected settings.
-2. Check one readable document: a local visual request, execution of the instruction, and obtaining a response conforming to the contract.
-3. Check PNG/JPEG, a multi-page PDF, both sides of one card, and another document type outside passports/residence permits. Include agreed rotations, perspective, shadow/glare, blur, and cropping.
-4. Check an unreadable field, a missing field, ambiguous characters, conflicting values across pages, and a doubtful type. A refusal/partial result must be distinguishable from successful reading.
-5. Measure load time, first and repeated request, processing time per document, peak RAM/VRAM, errors, and stability on a longer set. State the page count/resolution and context for each case.
-6. Compare results with ground truth; show incorrectly accepted values, omissions, refusals, partial results, and correct full responses separately. The external English response must not add unrequested fields.
-7. Prepare a report with the limits of the verified configuration and a conclusion: continue with the selected path, change parameters, or return a significant choice for agreement.
+1. Measure peak VRAM and RAM, load time, image encoding time, and prompt processing and generation speed for: mmproj on GPU and on CPU; f16 and q8_0 KV cache; several image token budgets; PDF pages rendered at 150 and 200 DPI; photos at 1,280 and 2,560 px.
+2. Determine the resource envelope: how many pages of each kind fit one call together with the prompt and a reserved output budget.
+3. Verify the runtime behavior the design relies on: schema-constrained output with images; raw token probabilities together with images and a schema; release of the slot after a streaming call is cancelled, as reported by the slots endpoint, and the release time; behavior at timeout; restart and health-check time; whether the model can localize a field region for the second-reading signal.
+4. Run a development set of 10–15 documents that covers all six scripts of the script matrix, two sides of a card, a multi-page PDF, and both Telegram image paths. This gives a qualitative legibility signal; it is not a benchmark. These documents may later join the tuning set, never the benchmark.
 
-If the configuration does not fit or does not meet the criteria, this is a verified negative result, not permission to automatically choose another model, cloud, or hybrid. CPU/GPU allocation and reducing context/resolution are considered with an impact assessment; significant changes require agreement.
+Result: a feasibility report with the envelope, the selected launch profile, and the verified runtime behaviors. Continue to T01b if at least one configuration within the PC's limits processes one A4 page at 150 DPI or one 1,280-px photo per call with the prompt and output budget, schema-constrained output works with images, and cancellation is confirmable or a restart completes within the release window. Otherwise, the report lists the within-PC options of S-11-A1 for the developer. A script that is never read correctly on the development set is reported before the benchmark is built.
+
+## T01b — Recognition Core and Calibration
+
+Scope: the recognition core as the future production module of T05, not a throwaway script. It includes the model adapter (streaming, cancellation, probabilities), page preparation with pypdfium2 and Pillow in a child process, matching and extraction prompts under the v1 contract, lazy batches and merging, validation, the verification layer, and a command-line runner over a case manifest. It uses the toolchain of [ADR-0005](../docs/decisions/ADR-0005-runtime-supervision-and-packaging.md). Profiles are hand-authored fixtures in the canonical schema; the instruction compiler arrives in T03, and T07 measures again with compiled profiles.
+
+1. Prepare the tuning set (ACCEPTANCE_PLAN) and its ground truth.
+2. Implement the contract, merging, and signals V1–V4; add V5 only if needed and within the PC's resources.
+3. Calibrate thresholds and the enabled signals on the tuning set; produce risk–coverage curves.
+4. Freeze versions, prompts, thresholds, parameters, and the manifest format; measure per-page times of the frozen configuration for admission control.
+
+Result: the frozen configuration, the calibration report, and the per-page times.
+
+## T01c — Benchmark Gate
+
+1. Prepare the sealed 70-case benchmark (40 readable, 20 difficult, 10 negative) with delivery paths and reviewed ground truth. Preparation may run in parallel with T01a and T01b; benchmark cases are never used for tuning.
+2. Run the benchmark once with the frozen configuration.
+3. Report per ACCEPTANCE_PLAN: incorrectly accepted values, incorrect automatic profiles, completeness with its denominator, zero-error bounds, per-group metrics, lists, refusals, resources, p50/p95 times, per-page times, and failures. The external English response must not add unrequested fields.
+
+Pass: continue to T02. Failure: record the verified negative result, analyze errors on the tuning set and replaced cases, and follow the remediation order of ADR-0004 on this PC. When those options are exhausted, the developer decides whether to narrow the v1 scope or revise the criteria. Conclusions must not be substituted by lowering the threshold retroactively.
 
 ## Checks and Completion Criteria
 
-- The experiment is reproducible from the described versions, inputs, and parameters; actual commands are added only after implementation and verification.
-- Processing remains local; document information is not sent to external AI services, logs, or backup.
-- Invalid/incomplete JSON or a contract violation does not count as successful extraction; format compliance does not count as proof that values are correct.
-- Deletion of temporary originals and derived data on completion/error is confirmed; cancellation and TTL are checked in the available experimental interface or explicitly remain unverified until integration.
-- Actual measurements for the accepted set and a report on the criteria are available. On success, work may proceed to T02; on failure, record the negative result and return a significant revision to the developer. Conclusions must not be substituted by lowering the threshold retroactively.
+- Each stage is reproducible from the recorded versions, inputs, and parameters.
+- Invalid or incomplete JSON or a contract violation does not count as successful extraction; format compliance does not count as proof that values are correct.
+- The runner deletes temporary renders and intermediate outputs after each case; only manifests, metrics, and content-free logs remain. Cancellation and deadlines in product flows are verified in T02–T06.
+- The recognition core and the runner of T01b become product code for T05 and T07. The exploratory scripts of T01a are not product code.
 
 ## Exclusions
 
-Telegram bot, database, profiles, customer server, load SLA, fine-tuning, installation of all alternatives, and mandatory comparison with hybrid are out of scope. One successful example does not prove arbitrary documents; a T01 result does not mean the product is ready.
+Telegram bot, database, instruction compiler, state machine, customer server, a stronger GPU server (S-11-A1), load SLA, fine-tuning, installation of all alternatives, and a mandatory comparison with a hybrid path are out of scope. One successful example does not prove arbitrary documents; a T01 result does not mean the product is ready.

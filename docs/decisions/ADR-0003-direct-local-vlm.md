@@ -30,3 +30,7 @@ Official `Qwen/Qwen3-VL-4B-Instruct-GGUF`, language component Q4_K_M, initially 
 T01 measures accuracy, abstentions, time, RAM/VRAM on the current PC. Only successful results against the agreed criteria allow integration to continue. Failure requires a decision about settings/candidate/architecture; a hidden cloud fallback is prohibited.
 
 The model was not downloaded or tested in the current task. The architectural path was accepted; this is not a claim of achieved quality.
+
+## Clarification, 2026-09-27
+
+T01 runs in three stages: runtime feasibility, calibration of the recognition core on the tuning set, and one sealed benchmark run ([T01](../../specs/T01-recognition-baseline.md)). Statuses returned by the model pass through the verification layer of [ADR-0004](ADR-0004-abstention-and-verification.md), which can only downgrade them. If T01 fails, remediation stays on the current PC (S-11-A1) in the order of ADR-0004; other models are compared only within this hardware.

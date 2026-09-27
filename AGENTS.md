@@ -10,6 +10,12 @@
 
 ## Task Context
 
+Before executing each task, review the applicable repository instructions and the available skill catalog, including project-local and user-global skills. Reassess applicability when the task scope changes.
+
+- For each applicable skill, read its complete `SKILL.md` before performing the work it governs. Follow thin entrypoints to their canonical instructions. Read supporting references required for the selected workflow; load other resources only as needed.
+- Use the supplied skill names, descriptions, and paths for selection. Do not routinely rescan skill directories or read every skill. If the catalog is unavailable or appears incomplete, inspect discovery metadata in the relevant skill locations and report any unresolved discovery limitation.
+- Briefly identify the skills used and their purpose when starting to use them. If none applies, proceed under the repository instructions. Skill guidance does not override explicit user instructions or authorize additional actions.
+
 Do not read all documentation automatically. Choose the relevant sources:
 
 | When | Where to look |

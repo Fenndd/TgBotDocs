@@ -26,3 +26,7 @@ The future development outcome is a finished product ready for delivery to the c
 - Downloading weights/updates over the network and sending a document for inference are different actions; installation is not authorized by the current task.
 - The unknown future server workload is not replaced with a fictional SLA.
 - Portability and a launch guide are designed before delivery; readiness for a specific unknown server is not promised.
+
+## Clarification, 2026-09-27
+
+S-11-A1 makes the current PC's hardware (6 GiB VRAM, 16 GiB RAM) the limit for v1 recognition: if T01 fails, remediation stays on this PC, and a stronger GPU server is not a v1 escalation path. "Local" means self-hosted inference on the machine that runs the bot, with no external AI. The delivered product runs on the deployment machine with the configuration verified on this hardware class; a server for scaling or a stronger model remains a post-v1 topic (S-04-A3). The remediation order is in [ADR-0004](ADR-0004-abstention-and-verification.md).

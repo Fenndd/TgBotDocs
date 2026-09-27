@@ -28,3 +28,7 @@ Sources: [aiogram](https://docs.aiogram.dev/en/latest/), [long polling](https://
 If the database is unavailable, a profile change cannot be accepted as saved. Inference must not block message reception. On restart, documents are not restored: the temporary directory is cleaned before new files are accepted. The user is told to start a new input and upload the files again.
 
 Scaling the number of instances, an external queue, a webhook, and the customer's server are outside this decision. Separate justification and tasks are required if the workload demands them.
+
+## Clarification, 2026-09-27
+
+[ADR-0005](ADR-0005-runtime-supervision-and-packaging.md) refines the implementation composition. SQLAlchemy 2 and psycopg 3 run in synchronous mode in a thread pool, because psycopg's asynchronous mode conflicts with asyncio subprocesses on Windows. The Python line is chosen when T01b starts (3.14 target, 3.13 fallback) instead of 3.12, and uv manages the interpreter and the lockfile. The stack selected by the user — Python, aiogram, PostgreSQL — is unchanged.

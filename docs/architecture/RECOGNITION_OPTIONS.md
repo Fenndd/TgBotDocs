@@ -1,6 +1,6 @@
 # Local Recognition Options
 
-Status: overview of the alternatives considered. Direct Qwen3-VL-4B Q4_K_M / llama.cpp was selected — [ADR-0003](../decisions/ADR-0003-direct-local-vlm.md). Official sources were checked on 2026-09-27; models were not downloaded or run.
+Status: overview of the alternatives considered. Direct Qwen3-VL-4B Q4_K_M / llama.cpp was selected — [ADR-0003](../decisions/ADR-0003-direct-local-vlm.md). Official sources were checked on 2026-09-27; models were not downloaded or run. Alternatives considered after a T01 failure must fit the current PC's hardware (S-11-A1); the remediation order is in [ADR-0004](../decisions/ADR-0004-abstention-and-verification.md).
 
 ## Basis and Boundaries
 
@@ -8,7 +8,7 @@ Status: overview of the alternatives considered. Direct Qwen3-VL-4B Q4_K_M / lla
 - Current PC: Windows 11 Home x64, Ryzen 5 5600H, 16 GiB installed RAM (about 13.9 GiB of physical memory available to the OS), RTX 3060 Laptop GPU with 6144 MiB VRAM. This is not a measurement of free memory or a benchmark.
 - Local processing runs on this PC. The customer's server, workload, and acceptable response time are not yet known.
 - The user's latest confirmed decisions: a single file is processed automatically; an album forms a set; `Several pages` mode is completed with the `Process` button; one set represents one document; profiles are personal.
-- Temporary files on disk are allowed. The original, OCR, and result are deleted after a response, error, cancellation, or TTL; content is not placed in logs or backups. The specific TTL still needs to be defined.
+- Temporary files on disk are allowed. The original, OCR, and result are deleted after a response, error, cancellation, or TTL; content is not placed in logs or backups. The TTLs are defined in [OPERATIONS](../operations/OPERATIONS.md).
 
 ## Direct VLM and Separate OCR
 
@@ -56,5 +56,7 @@ The llama.cpp runtime uses MIT; PaddleOCR uses Apache-2.0. Product delivery requ
 4. Measure peak RAM/VRAM, time for first processing and repeat requests, time per document, and stability on long sets. Do not substitute model file size or someone else's benchmark for a result.
 5. Check the JSON contract, model errors, temporary-data cleanup after response/error/cancellation/TTL, and absence of content in logs/backups.
 6. Use the adopted [quality criteria](../testing/ACCEPTANCE_PLAN.md); derive server requirements after measurements and clarification of the workload.
+
+The staged experiment is defined in [T01](../../specs/T01-recognition-baseline.md), and the verification signals are in ADR-0004.
 
 Speed, quality, fit, and data cleanup have **not yet been verified by execution**. The method, model, and runtime were selected by the user; suitability must be confirmed by T01. This overview does not authorize installing models or starting implementation during the planning session.
