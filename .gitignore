@@ -1,0 +1,13 @@
+# Local environment values; examples must contain no real secrets.
+.env
+.env.*
+!.env.example
+
+# Personal Claude Code overrides, not shared project instructions.
+.claude/settings.local.json
+CLAUDE.local.md
+
+# Operating-system metadata.
+.DS_Store
+Thumbs.db
+Desktop.ini
