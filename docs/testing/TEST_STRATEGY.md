@@ -1,6 +1,6 @@
 # Test Strategy
 
-Status: implementation active, 2026-09-27. The [T01a runtime report](T01A_REPORT.md) records executed exploratory checks and measurement-harness tests. Production recognition-core tests are being implemented in T01b; product integration and acceptance remain outstanding. The strategy below is unchanged.
+Status: implementation active, 2026-09-28. The [T01a runtime report](T01A_REPORT.md) records executed exploratory checks and measurement-harness tests. The T01b recognition core and T01 tooling have deterministic component tests (`python -m uv sync --locked`, then `.venv\Scripts\python.exe -m pytest -q` and `.venv\Scripts\python.exe -m ruff check src tests`); GPU checks run through the [T01 procedure](T01_PROCEDURE.md). Product integration and acceptance remain outstanding. The strategy below is unchanged.
 
 ## Test Levels
 
@@ -11,7 +11,7 @@ Status: implementation active, 2026-09-27. The [T01a runtime report](T01A_REPORT
 5. **T07 — acceptance and resilience.** The sealed 70-case benchmark through the integrated pipeline with compiled profiles, fault injection, and leak checks.
 6. **T08 — delivery reproducibility.** Clean launch and smoke test of the native Windows installation and of the Linux container path on a native Linux x86-64/NVIDIA host, versions, migrations, backup/restore, licenses, and guide.
 
-pytest with async support is planned for unit/component/integration tests, and Hypothesis for model-based state machine tests. Actual commands are recorded in T02 after the environment is created and run; such commands are not claimed to exist now.
+pytest with async support is planned for unit/component/integration tests, and Hypothesis for model-based state machine tests. The component-test commands above exist since T01b; T02 adds the application's own suites and records their commands after they run.
 
 ## Coverage Matrix
 

@@ -41,3 +41,7 @@ For profile matching, automatic selection requires one candidate with a probabil
 - Majority voting across repeated identical requests: errors are correlated, and the contract forbids resolving conflicts by voting.
 - A mandatory separate OCR pipeline from the start: memory and latency cost without evidence of need; kept as the optional V5.
 - Showing unverified candidates as "possible readings": conflicts with the no-guesses rule (S-06-A2) and would need a developer decision.
+
+## Measured Update (2026-09-28, development diagnostics)
+
+On the unreviewed synthetic tuning set, the matching margin over profile-index token probabilities did not withhold any wrong automatic selection: the model chose wrong profiles for a blank page, identical profiles, a document without a suitable profile, and a two-sided card with index probabilities of 0.94–1.0. Following remediation step 1, the matching prompt was changed (describe the document first, field labels, explicit status rules; ED-015); a full diagnostic run with prompt version t01b-3 then showed no wrong automatic selection at any margin, and its best zero-error point (V1 0.7 with V2) reached 0.907 readable completeness. The margin stays a calibrated parameter; a profile-order permutation check was evaluated and not enabled because it did not improve the trade-off. V1 separated the observed misreadings (mostly Arabic diacritics) from correct values. These are diagnostics, not calibration: the tuning set's human review is still pending.

@@ -1,11 +1,11 @@
 # Development Plan
 
-Status: implementation authorized and active on 2026-09-27. T01a's technical transition condition is met; [STATUS](STATUS.md) and the [T01a report](docs/testing/T01A_REPORT.md) distinguish measured runtime feasibility from pending quality acceptance.
+Status: implementation authorized and active; updated 2026-09-28. T01b tooling is implemented and tested; the next steps need the developer's human review and photographs. [STATUS](STATUS.md) records the current state and evidence; the [T01 procedure](docs/testing/T01_PROCEDURE.md) gives the exact commands.
 
 ## Current Execution Sequence
 
-1. T01b: implement the reusable recognition core, meaningful contract/failure tests, and tuning runner. Obtain the required human review of at least 20 tuning cases before calibration; freeze versions, prompts, signals, thresholds, and measured per-page times.
-2. T01c: prepare a separate reviewed sealed 40/20/10 benchmark and execute the frozen operating point. Follow ADR-0004's within-PC remediation order if it fails. Do not begin T02 before it passes.
+1. T01b (developer): review the 25-case tuning set in its review form and apply the decisions. Then (assistant): run calibration, freeze with the pre-declared rule (ED-014), and record the calibration report with risk–coverage curves and per-page times. If no zero-error point exists, follow ADR-0004's remediation order on this PC.
+2. T01c (developer): generate the benchmark plan, print and photograph the 20 difficult cases, deliver the photo-path cases through Telegram, and review all 70 cases. Then (assistant): ingest, seal against the frozen configuration, run the benchmark once, and report against ACCEPTANCE_PLAN. Do not begin T02 before it passes.
 3. T02 through T08: follow the existing [roadmap](docs/planning/ROADMAP.md) and specifications, with logically complete verified local commits and a separate final quality pass.
 4. Defer final real-Telegram E2E and remote deployment per the user's current instruction. Record unavailable native Linux verification honestly; do not substitute Windows or WSL evidence.
 

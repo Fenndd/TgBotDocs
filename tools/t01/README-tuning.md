@@ -45,6 +45,8 @@ Output has `manifest.json`, `review.html`, `printable-originals.pdf`, the copied
 
 ## Fixture manifest and canonical adaptation
 
+Update 2026-09-28: the canonical adapter exists as `tools/t01/canonicalize_tuning.py` (profile library and user-style profile descriptions per ED-015); its output `canonical-manifest.json` and the human review form are described in [T01_PROCEDURE](../../docs/testing/T01_PROCEDURE.md). The paragraph below records the original package design.
+
 The root recognition-core task owns canonical models and the adapter. This generator uses the existing development image-record format with small tuning metadata additions; it does not introduce a second production manifest API. `schema_version` is 1 for this fixture package and `canonical_manifest_adapter_status` is pending. The final model adapter must validate/convert the candidate profiles and draft ground truth before use. The case manifest with expected values must never be sent wholesale as an extraction prompt.
 
 | Location | Meaning |

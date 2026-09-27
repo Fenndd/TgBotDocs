@@ -1,6 +1,6 @@
 # T01 — Direct Recognition Check on the Current PC
 
-Status: implementation active, 2026-09-27. T01a's technical transition condition is met ([report](../docs/testing/T01A_REPORT.md)); human development/tuning-corpus review remains pending. T01b core implementation is starting; calibration and T01c have not run. The requirements below remain the accepted stage sequence and criteria.
+Status: implementation active, 2026-09-28. T01a's technical transition condition is met ([report](../docs/testing/T01A_REPORT.md)). The T01b recognition core, calibration runner, freeze step, tuning-set canonicalization, human-review tooling, and T01c benchmark preparation are implemented and tested ([procedure](../docs/testing/T01_PROCEDURE.md)); the human review of the tuning set, calibration, freeze, the physical photographs and Telegram photo delivery of the benchmark, and the benchmark run have not been performed. The requirements below remain the accepted stage sequence and criteria.
 
 ## Goal and Basis
 
