@@ -23,6 +23,9 @@ Mapping (the canonical schema forbids extra keys, so the rules live here, not in
 - Pages: ``page_ids`` = 1..N in document order (legacy page order: file order, then pages within a file);
   legacy page IDs such as ``dev-08-p02`` map to these integers.
 - Profiles: legacy candidate profiles become ``ExtractionProfile`` objects owned by ``synthetic-user``.
+  A profile carrying the generic legacy fixture description (meta-commentary no user would write) gets the
+  user-style name and description of its case's category from ``USER_STYLE_PROFILES``; case-specific
+  descriptions and all fields are kept unchanged.
   Profile library: every case also receives two distractor profiles, one from each of the two categories
   following the case's category in the cyclic order ``identity, invoice, receipt, certificate, contract,
   application, letter, repeating_rows``; each distractor is the expected profile of the first readable matched
@@ -101,7 +104,31 @@ def verify_inventory(legacy: dict, root: Path) -> dict[str, str]:
     return hashes
 
 
-def _profile(raw: dict) -> ExtractionProfile:
+FIXTURE_DESCRIPTION_SUFFIX = "This is a fixture applicability description, not a product catalog."
+# A user describes the kind of document a profile applies to; the legacy fixture text
+# ("Synthetic X documents with the requested printed fields ...") is meta-commentary
+# no user would write, so the generic template is replaced by user-style wording per
+# category. Case-specific legacy descriptions are kept unchanged.
+USER_STYLE_PROFILES = {
+    "identity": ("Identity card", "Identity, membership or access cards issued to a holder, scanned or "
+                 "photographed on one or both sides."),
+    "invoice": ("Supplier invoice", "Invoices issued by a supplier that bill for goods or services, with an "
+                "invoice number, a date, line items and a total."),
+    "receipt": ("Purchase receipt", "Shop or payment receipts that confirm a purchase from a merchant, with the "
+                "purchased items and the amount paid."),
+    "certificate": ("Certificate", "Certificates that confirm a completion, qualification or status of a named "
+                    "subject."),
+    "contract": ("Contract", "Contracts or agreements between parties, identified by a contract reference and "
+                 "subject."),
+    "application": ("Application form", "Application or request forms submitted to a department or office, "
+                    "with a purpose and a processing status."),
+    "letter": ("Letter", "Letters and official correspondence from a sender, with a subject and message text."),
+    "repeating_rows": ("Stock list", "Warehouse stock or inventory sheets that list items with quantities and "
+                       "amounts."),
+}
+
+
+def _profile(raw: dict, category: str) -> ExtractionProfile:
     def scalar(field: dict) -> ScalarField:
         validator = field.get("validator")
         return ScalarField(id=field["id"], label=field["label"], description=field["description"], type=field["type"],
@@ -114,8 +141,11 @@ def _profile(raw: dict) -> ExtractionProfile:
                                     columns=tuple(scalar(column) for column in field["columns"])))
         else:
             fields.append(scalar(field))
-    return ExtractionProfile(id=raw["id"], owner=OWNER, version=raw["version"], name=raw["name"],
-                             description=raw["description"], original_instruction=raw["original_instruction"],
+    name, description = raw["name"], raw["description"]
+    if description.endswith(FIXTURE_DESCRIPTION_SUFFIX):
+        name, description = USER_STYLE_PROFILES[category]
+    return ExtractionProfile(id=raw["id"], owner=OWNER, version=raw["version"], name=name,
+                             description=description, original_instruction=raw["original_instruction"],
                              fields=tuple(fields), guidance=raw.get("guidance") or "")
 
 
@@ -241,7 +271,7 @@ def _case(case: dict, hashes: dict[str, str]) -> CorpusCase:
         raise CanonicalizationError("legacy_input_unknown", case["id"])
     delivery = case["delivery_path"]
     delivery = "photo" if delivery.startswith("simulated_telegram_photo_") else delivery
-    profiles = tuple(_profile(profile) for profile in case["candidate_profiles"])
+    profiles = tuple(_profile(profile, case["category"]) for profile in case["candidate_profiles"])
     origin = Origin(family_id=case["source_family"], kind="synthetic", permission_basis=case["permission"],
                     original_sha256=original, ancestor_sha256=ancestors,
                     prior_splits=("development",) if case.get("imported_frozen_development_case") else ())

@@ -275,3 +275,20 @@ def test_local_legacy_package_converts_in_memory():
     assert len(manifest.cases) == 25 and all(case.review.status == "pending" for case in manifest.cases)
     assert set(manifest.eligibility_reasons("calibration")) == {"human_review_or_ground_truth_pending",
                                                                   "review_preparation_only"}
+
+
+def test_generic_fixture_descriptions_become_user_style_and_specific_ones_stay(tmp_path):
+    package = Package(tmp_path / "package")
+    for category in CATEGORIES:
+        package.add(f"case-{category}", category)
+    generic = dict(package.cases[1]["candidate_profiles"][0], id="generic-invoice", name="Synthetic invoice review",
+                   description="Synthetic invoice documents. " + canon.FIXTURE_DESCRIPTION_SUFFIX)
+    package.add("case-generic", "invoice", quality="negative", matching="uncertain", profiles=[generic])
+    profiles = {p.id: p for case in convert(package)[0].cases for p in case.profiles}
+    assert (profiles["generic-invoice"].name, profiles["generic-invoice"].description) == \
+        canon.USER_STYLE_PROFILES["invoice"]
+    assert FIXTURE_TEXT not in profiles["generic-invoice"].description
+    assert profiles["profile-case-letter"].description == "Synthetic"
+
+
+FIXTURE_TEXT = "fixture applicability description"
