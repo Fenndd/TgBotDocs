@@ -10,6 +10,13 @@ context comes from parsed, pre-verification rows, alternate readings depend only
 chose a profile. A job therefore records one ``JobTrace`` and ``decide`` derives the
 production decision from it. ``recognize`` returns ``decide`` with the configured
 policy, so calibration replay and production share one decision path.
+
+A failure after matching does not abort the trace: it is recorded with its phase and
+fixed code, and ``decide`` raises it only for a policy that would have made the failing
+call. Alternate-view failures are recorded per batch and, without V2 enforcement, the
+job continues, so the trace also serves policies that never make those calls. Charged
+processing time is recorded per phase; given a processing budget, ``decide`` times a
+policy out on the calls that policy makes.
 """
 
 from __future__ import annotations
@@ -36,13 +43,15 @@ from .contracts import (
     validate_batch,
 )
 from .merge import MixedDocumentError, merge_batches
-from .preparation import PreparationLimits, PreparedDocument, inspect_document, render_batch
+from .preparation import PreparationError, PreparationLimits, PreparedDocument, inspect_document, render_batch
 from . import prompts
 from .runtime import RuntimeProfile
 from .verification import VerificationPolicy, verify_field, verify_matching
 
 Pointer = tuple[str | int, ...]
 CALL_KINDS = ("token_count", "matching", "extraction", "alternate")
+# Codes a job's own processing budget can cause, directly or through a call/worker timeout.
+BUDGET_CODES = frozenset({"processing_budget_exhausted", "runtime_timeout", "worker_timeout"})
 
 
 @dataclass(frozen=True)
@@ -106,16 +115,48 @@ class JobObserver:
     preparation_s: float = 0.0
     alternate_preparation_s: float = 0.0
     contract_retries: int = 0
+    # Set only when ``CoreSettings.keep_trace`` is True, also for a job that failed after
+    # matching. It holds job content: keep it in memory for replay, never serialize it.
+    trace: JobTrace | None = None
+
+
+@dataclass(frozen=True)
+class StageFailure:
+    """Content-free failure of one recorded phase: a fixed code, never exception text.
+
+    ``phase_s`` is the charged time of the failing phase; ``elapsed_s`` is the recording
+    job's total charged time when it failed.
+    """
+
+    kind: Literal["model", "preparation"]
+    code: str
+    phase_s: float
+    elapsed_s: float
+
+    @classmethod
+    def of(cls, error: ModelError | PreparationError, phase_s: float, elapsed_s: float) -> StageFailure:
+        kind = "model" if isinstance(error, ModelError) else "preparation"
+        return cls(kind, error.code, max(0.0, phase_s), elapsed_s)
+
+    def error(self) -> ModelError | PreparationError:
+        return ModelError(self.code) if self.kind == "model" else PreparationError(self.code)
 
 
 @dataclass(frozen=True, repr=False)
 class BatchTrace:
-    """Parsed primary batch before verification, its raw V1 evidence and alternate."""
+    """Parsed primary batch before verification, its raw V1 evidence and alternate.
+
+    ``primary_s`` is the charged time of packing and the primary call; ``alternate_s``
+    that of the alternate view, whose failure (if any) is ``alternate_error``.
+    """
 
     batch: BatchResult
     probabilities: Mapping[Pointer, tuple[float, ...] | None]
     alternate: BatchResult | None
     alternate_attempted: bool
+    primary_s: float = 0.0
+    alternate_s: float = 0.0
+    alternate_error: StageFailure | None = None
 
 
 @dataclass(frozen=True, repr=False)
@@ -133,6 +174,11 @@ class JobTrace:
     alternate_preparation_s: float = 0.0
     contract_retries: int = 0
     processing_s: float = 0.0
+    # Charged time of inspection and matching, shared by every policy.
+    setup_s: float = 0.0
+    # A failure in the extraction phase after the recorded batches (batch index
+    # ``len(batches)``); the recording job stopped there.
+    failure: StageFailure | None = None
 
 
 @dataclass(frozen=True, repr=False)
@@ -298,19 +344,54 @@ def decide(
     *,
     policy: VerificationPolicy,
     matching_margin: float,
+    processing_budget_s: float | None = None,
+    alternate_calls: bool | None = None,
 ) -> CoreResult:
     """Pure production decision for one recorded job under a verification policy.
 
     Replay is exact when the trace was collected with a matching margin no higher
     than ``matching_margin``, with alternate readings computed whenever the policy
     enforces V2, and without V2 early termination when the policy does not enforce it.
-    A trace that cannot support the policy raises ``ValueError`` with a fixed code.
+    ``alternate_calls`` says whether the decided job makes the alternate calls (the
+    production default: exactly when the policy enforces V2). A recorded failure is
+    raised as its ``ModelError``/``PreparationError`` only when this job reaches the
+    failing call. With ``processing_budget_s`` the job times out
+    (``processing_budget_exhausted``) once the charged time of its own phases exceeds it.
+    A trace that cannot support the policy raises ``ValueError`` with a fixed code;
+    ``trace_undetermined_for_policy`` means the recording job may have failed only
+    because of calls this job does not make.
     """
     if type(matching_margin) not in (float, int) or isinstance(matching_margin, bool) or not (
         math.isfinite(matching_margin) and 0 <= matching_margin <= 1
     ):
         raise ValueError("an explicit finite matching margin in [0, 1] is required")
+    if processing_budget_s is not None and not (
+        type(processing_budget_s) in (float, int) and math.isfinite(processing_budget_s) and processing_budget_s > 0
+    ):
+        raise ValueError("a positive finite processing budget is required")
+    alternate_calls = policy.check_alternate_view if alternate_calls is None else alternate_calls
+    if policy.check_alternate_view and not alternate_calls:
+        raise ValueError("The alternate-view signal requires computing alternate readings")
     resolve_matching(MatchingResponse(status="uncertain"), snapshots)
+    clock, skipped_s, skipped_runtime_error = 0.0, 0.0, False
+
+    def spend(seconds: float):
+        nonlocal clock
+        clock += seconds
+        if processing_budget_s is not None and clock > processing_budget_s:
+            raise ModelError("processing_budget_exhausted")
+
+    def fail(failure: StageFailure):
+        # The recording job spent time, or changed runtime state, on calls this job
+        # skips; its budget or runtime failure need not happen here.
+        if skipped_runtime_error or (
+            skipped_s > 0 and failure.code in BUDGET_CODES
+            and (processing_budget_s is None or failure.elapsed_s > processing_budget_s)
+        ):
+            raise ValueError("trace_undetermined_for_policy")
+        raise failure.error()
+
+    spend(trace.setup_s)
     manual = trace.manual_profile is not None
     if manual:
         if trace.manual_profile not in snapshots:
@@ -333,20 +414,30 @@ def decide(
 
     if profile is None:
         return result(matching, None, None, 0)
-    if not trace.batches:
-        raise ValueError("trace_incomplete_for_policy")
     verified, covered = [], []
     for index, item in enumerate(trace.batches):
+        spend(item.primary_s)
         if _rejects(item.batch):
             return result(MatchingResponse(status="mixed"), None, None, index + 1)
-        if policy.check_alternate_view:
+        if alternate_calls:
             if not item.alternate_attempted:
                 raise ValueError("trace_lacks_alternate_view")
+            spend(item.alternate_s)
+        elif item.alternate_attempted:
+            skipped_s += item.alternate_s
+            if item.alternate_error is not None and item.alternate_error.code != "recognition_contract_violation":
+                skipped_runtime_error = True
+        if policy.check_alternate_view:
+            if item.alternate_error is not None:
+                fail(item.alternate_error)
             if item.alternate is not None and _rejects(item.alternate):
                 return result(MatchingResponse(status="mixed"), None, None, index + 1)
         verified.append(verify_batch(item.batch, item.probabilities, profile, policy, item.alternate))
         covered.extend(item.batch.page_ids)
-    if tuple(covered) != trace.page_ids:
+    if trace.failure is not None:
+        spend(trace.failure.phase_s)
+        fail(trace.failure)
+    if not trace.batches or tuple(covered) != trace.page_ids:
         raise ValueError("trace_incomplete_for_policy")
     try:
         recognition = merge_batches(profile, tuple(verified), trace.page_ids, traversal_complete=True)
@@ -360,6 +451,7 @@ class _Job:
     budget: ProcessingBudget
     observer: JobObserver
     scratch: Path
+    failure: StageFailure | None = None
 
 
 class RecognitionCore:
@@ -517,52 +609,63 @@ class RecognitionCore:
             return alternate
 
     async def _extract(self, job, document: PreparedDocument, profile, batches: list[BatchTrace]):
+        """Record every batch; a failure is recorded, not raised (``decide`` raises it)."""
         previous, start, index = {}, 0, 0
+        loop = asyncio.get_running_loop()
+        enforce = self.settings.verification.check_alternate_view
         while start < len(document.pages):
-            async with self.turn():
-                with job.budget.charge():
+            before = job.budget.used
+            try:
+                async with self.turn():
+                    with job.budget.charge():
 
-                    def text_for(ids, boundary=previous):
-                        return prompts.extraction_text(profile, ids, boundary)
+                        def text_for(ids, boundary=previous):
+                            return prompts.extraction_text(profile, ids, boundary)
 
-                    def schema_for(ids):
-                        return prompts.extraction_schema(profile, ids)
+                        def schema_for(ids):
+                            return prompts.extraction_schema(profile, ids)
 
-                    async with self._batch(
-                        job, document, start, text_for, schema_for, stage="extraction", batch=index
-                    ) as pages:
-                        ids = tuple(p.page_id for p in pages)
+                        async with self._batch(
+                            job, document, start, text_for, schema_for, stage="extraction", batch=index
+                        ) as pages:
+                            ids = tuple(p.page_id for p in pages)
 
-                        def parse(text, batch_ids=ids):
-                            return prompts.parse_batch(text, profile, batch_ids)
+                            def parse(text, batch_ids=ids):
+                                return prompts.parse_batch(text, profile, batch_ids)
 
-                        batch, reply = await self._call(
-                            job, text_for(ids), pages, schema_for(ids), parse, kind="extraction", batch=index
-                        )
-                        stop = _rejects(batch)
-                        alternate, attempted = None, False
-                        if not stop and self.settings.compute_alternate_view:
-                            attempted = True
-                            alternate = await self._alternate(
-                                job, document, pages, text_for, schema_for, parse, index
+                            batch, reply = await self._call(
+                                job, text_for(ids), pages, schema_for(ids), parse, kind="extraction", batch=index
                             )
-                            # Without V2 enforcement an alternate rejection is only
-                            # recorded, so the trace also serves policies without V2.
-                            stop = (
-                                self.settings.verification.check_alternate_view
-                                and alternate is not None
-                                and _rejects(alternate)
-                            )
-                        batches.append(BatchTrace(batch, probability_map(reply, batch), alternate, attempted))
-                        if stop:
-                            return
-                        # Continuation context comes from the parsed rows, never
-                        # from policy-dependent verified rows.
-                        previous = prompts.boundary_context(batch)
-                        start += len(pages)
-                        index += 1
-        with job.budget.charge():
-            _ = job.budget.remaining
+                            alternate, attempted, alternate_s, alternate_error = None, False, 0.0, None
+                            if not _rejects(batch) and self.settings.compute_alternate_view:
+                                attempted, begin = True, loop.time()
+                                try:
+                                    alternate = await self._alternate(
+                                        job, document, pages, text_for, schema_for, parse, index
+                                    )
+                                except (ModelError, PreparationError) as error:
+                                    alternate_error = error
+                                alternate_s = loop.time() - begin
+                            size = len(pages)
+            except (ModelError, PreparationError) as error:
+                job.failure = StageFailure.of(error, job.budget.used - before, job.budget.used)
+                return
+            block = job.budget.used - before
+            failure = None if alternate_error is None else StageFailure.of(
+                alternate_error, alternate_s, job.budget.used)
+            batches.append(BatchTrace(batch, probability_map(reply, batch), alternate, attempted,
+                                      primary_s=max(0.0, block - alternate_s), alternate_s=alternate_s,
+                                      alternate_error=failure))
+            # Without V2 enforcement an alternate rejection or failure is only recorded,
+            # so the trace also serves policies that never make the alternate call.
+            if _rejects(batch) or (enforce and (failure is not None or (
+                    alternate is not None and _rejects(alternate)))):
+                return
+            # Continuation context comes from the parsed rows, never from
+            # policy-dependent verified rows.
+            previous = prompts.boundary_context(batch)
+            start += size
+            index += 1
 
     async def recognize(
         self,
@@ -596,6 +699,7 @@ class RecognitionCore:
                 minimum_margin=self.settings.matching_margin,
             )
             profile = resolve_matching(verified, snapshots)
+        setup_s = job.budget.used
         batches: list[BatchTrace] = []
         if profile is not None:
             await self._extract(job, document, profile, batches)
@@ -611,8 +715,16 @@ class RecognitionCore:
             alternate_preparation_s=job.observer.alternate_preparation_s,
             contract_retries=job.observer.contract_retries,
             processing_s=job.budget.used,
+            setup_s=setup_s,
+            failure=job.failure,
         )
+        if self.settings.keep_trace:
+            job.observer.trace = trace
+        # The budget check over the job's own phases replaces a final live check, and a
+        # recorded failure is raised here with its original code.
         result = decide(
-            trace, snapshots, policy=self.settings.verification, matching_margin=self.settings.matching_margin
+            trace, snapshots, policy=self.settings.verification, matching_margin=self.settings.matching_margin,
+            processing_budget_s=self.settings.processing_budget_s,
+            alternate_calls=self.settings.compute_alternate_view,
         )
         return replace(result, trace=trace) if self.settings.keep_trace else result

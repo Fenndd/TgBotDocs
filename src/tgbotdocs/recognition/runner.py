@@ -3,7 +3,17 @@
 ``run`` collects one policy-independent trace per case (diagnostics or calibration)
 and replays the production decision for every calibration point; ``freeze`` selects a
 point and writes the frozen configuration; ``benchmark`` runs a sealed benchmark once
-per frozen configuration. Reports are content-free: case IDs, counts, rates, durations,
+per frozen configuration and once per behavior identity (environment and policy).
+
+Collection runs with ``COLLECTION_BUDGET_FACTOR`` times the production processing
+budget, so extra alternate-view calls cannot exhaust the budget of a point that never
+makes them; replay applies the production budget to each point's own recorded phases.
+A case whose outcome at a point cannot be determined from the trace is counted in that
+point's ``unreplayable_cases``, and such a point is never a zero-error candidate.
+
+The benchmark ledger lives at ``<data root>/ledger/benchmark-runs.jsonl``, beside the
+pinned runtime and model files of that data root; use one data root per PC.
+Reports are content-free: case IDs, counts, rates, durations,
 fixed error codes and hashes, never document values, profile contents, prompts or model
 text. ``--show-mismatches`` prints values to stderr only, for synthetic development or
 tuning cases, and never writes them to a file.
@@ -34,22 +44,23 @@ from pydantic import Field, StrictBool, StrictFloat
 
 from .adapter import ModelAdapter, ModelError
 from .contracts import ContractModel
-from .core import CoreResult, JobObserver, RecognitionCore, decide
-from .corpus import CorpusError, LoadedCase, LoadedCorpus, load_corpus, validate_split_separation
+from .core import CoreResult, JobObserver, JobTrace, RecognitionCore, decide
+from .corpus import CorpusError, CorpusManifest, LoadedCase, LoadedCorpus, load_corpus, validate_split_separation
 from . import config
 from .metrics import CaseObservation, aggregate_metrics
 from .preparation import PreparationError
 from .runtime import LocalRuntime, RuntimeFiles
 from .verification import VerificationPolicy
 
-REPORT_SCHEMA_VERSION = 1
+REPORT_SCHEMA_VERSION = 2
+COLLECTION_BUDGET_FACTOR = 2.0
 V1_GRID = (None, 0.3, 0.5, 0.7, 0.8, 0.85, 0.9, 0.95, 0.97, 0.99, 0.995, 0.999)
 MARGIN_GRID = (0.0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9)
 COMPLETENESS_TARGET = 0.90
 SELECTION_RULE = (
-    "Candidates are calibration points with zero incorrect accepted values and zero incorrect automatic "
-    "profile selections on the tuning set. Choose the maximum readable completeness (none counts as 0); "
-    "ties prefer V2 off, then the higher V1 threshold (disabled ranks lowest), then the higher matching "
+    "Candidates are calibration points with zero incorrect accepted values, zero incorrect automatic "
+    "profile selections and zero unreplayable cases on the tuning set. Choose the maximum readable "
+    "completeness (none counts as 0); ties prefer V2 off, then the higher V1 threshold (disabled ranks lowest), then the higher matching "
     "margin. No candidate: calibration_no_zero_error_point (ADR-0004 remediation applies). A selected "
     "completeness below 0.90 is refused unless explicitly accepted."
 )
@@ -95,10 +106,16 @@ def calibration_grid(alternates_collected: bool) -> tuple[CalibrationPoint, ...]
     )
 
 
+def production_budget_s() -> float:
+    return config.default_core_values().processing_budget_s
+
+
 def collection_settings(*, compute_alternate_view: bool):
-    """Permissive collection: V1 off, V2 not enforced, V3 on, margin 0, trace kept."""
+    """Permissive collection: V1 off, V2 not enforced, V3 on, margin 0, trace kept, extended budget."""
+    core = config.default_core_values().model_copy(
+        update={"processing_budget_s": production_budget_s() * COLLECTION_BUDGET_FACTOR})
     return config.core_settings(VerificationPolicy(), 0.0, compute_alternate_view=compute_alternate_view,
-                                keep_trace=True)
+                                keep_trace=True, core=core)
 
 
 # --- Runtime and resource sampling ------------------------------------------------------------
@@ -192,7 +209,11 @@ class ResourceSampler:
 
 @dataclass(repr=False)
 class CaseRun:
-    """One executed case. ``result`` holds job content in memory only; never serialize it."""
+    """One executed case. ``result`` and ``trace`` hold job content in memory only; never serialize them.
+
+    ``trace`` is kept also when the collecting job itself failed after matching, since
+    other calibration points may not make the failing call.
+    """
 
     case_id: str
     state: str
@@ -200,6 +221,13 @@ class CaseRun:
     wall_s: float
     observer: JobObserver = field(default_factory=JobObserver)
     result: CoreResult | None = None
+    trace: JobTrace | None = None
+
+
+def failure_state(error: ModelError | PreparationError) -> str:
+    if isinstance(error, ModelError):
+        return "timeout" if error.code in TIMEOUT_CODES else "failed"
+    return "input_refused" if error.code in REFUSED_INPUT_CODES else "failed"
 
 
 def _cleanup(scratch: Path) -> str | None:
@@ -223,23 +251,21 @@ async def execute_case(core, case: LoadedCase, tmp_root: Path) -> CaseRun:
     """Run one case in a fresh private scratch directory that is always removed."""
     observer = JobObserver()
     scratch = Path(tempfile.mkdtemp(prefix="case-", dir=tmp_root))
-    state, code, result = "completed", None, None
+    state, code, result, usable = "completed", None, None, True
     begin = time.monotonic()
     try:
         result = await core.recognize(case.files, case.profiles, scratch=scratch, observer=observer)
-    except ModelError as error:
-        state, code = ("timeout" if error.code in TIMEOUT_CODES else "failed"), error.code
-    except PreparationError as error:
-        state, code = ("input_refused" if error.code in REFUSED_INPUT_CODES else "failed"), error.code
+    except (ModelError, PreparationError) as error:
+        state, code = failure_state(error), error.code
     except Exception:
         # Exception text may quote document or model content; report only a fixed code.
-        state, code = "failed", "unexpected_error"
+        state, code, usable = "failed", "unexpected_error", False
     finally:
         wall = time.monotonic() - begin
         cleanup = _cleanup(scratch)
     if cleanup:
-        state, code, result = "failed", cleanup, None
-    return CaseRun(case.case_id, state, code, wall, observer, result)
+        state, code, result, usable = "failed", cleanup, None, False
+    return CaseRun(case.case_id, state, code, wall, observer, result, observer.trace if usable else None)
 
 
 def observation(case_id: str, state: str, result: CoreResult | None) -> CaseObservation:
@@ -250,12 +276,19 @@ def observation(case_id: str, state: str, result: CoreResult | None) -> CaseObse
                            automatic_profile_selection=not result.user_selected, recognition=result.recognition)
 
 
-def replay(case: LoadedCase, run: CaseRun, point: CalibrationPoint):
-    """Production decision of one recorded case at one point, plus content-free usage."""
-    if run.state != "completed" or run.result is None or run.result.trace is None:
+def replay(case: LoadedCase, run: CaseRun, point: CalibrationPoint, budget_s: float):
+    """Production decision of one recorded case at one point, plus content-free usage.
+
+    The decision entry is ``[case_id, batches_used, traversed_all_pages, unreplayable]``;
+    a point whose production job fails gets that failure's execution state and no entry.
+    """
+    if run.trace is None:
         return observation(case.case_id, run.state, None), None
     try:
-        result = decide(run.result.trace, case.profiles, policy=point.policy(), matching_margin=point.matching_margin)
+        result = decide(run.trace, case.profiles, policy=point.policy(), matching_margin=point.matching_margin,
+                        processing_budget_s=budget_s)
+    except (ModelError, PreparationError) as error:
+        return CaseObservation(case_id=case.case_id, execution_state=failure_state(error)), None
     except ValueError:
         return CaseObservation(case_id=case.case_id, execution_state="failed"), [case.case_id, 0, False, True]
     return (observation(case.case_id, "completed", result),
@@ -272,6 +305,12 @@ def _now() -> str:
 def _sha256_file(path: Path) -> str:
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def case_set_sha256(manifest: CorpusManifest) -> str:
+    """Identity of a case set by its files only: the sorted artifact hashes of each case."""
+    cases = sorted(sorted(artifact.sha256 for artifact in case.artifacts) for case in manifest.cases)
+    return hashlib.sha256(config.canonical_json(cases)).hexdigest()
 
 
 def case_row(run: CaseRun) -> dict:
@@ -292,11 +331,15 @@ def case_row(run: CaseRun) -> dict:
 
 
 def page_samples(rows: list[dict], decisions: dict[str, tuple[int, bool]], *, alternate: bool) -> dict:
-    """Per-page seconds by page kind for the calls a given decision actually needs."""
+    """Per-page seconds by page kind for the calls a given decision actually needs.
+
+    Only decisions that traversed every page count; the recording job's own execution
+    state does not matter, since it may have made calls the decision does not.
+    """
     samples: dict[str, list[float]] = defaultdict(list)
     for row in rows:
         used, full = decisions.get(row["case_id"], (0, False))
-        if row["execution_state"] != "completed" or not full or not row["page_kinds"]:
+        if not full or not row["page_kinds"]:
             continue
         kinds = row["page_kinds"]
         preparation = row["preparation_s"] + (row["alternate_preparation_s"] if alternate else 0.0)
@@ -346,29 +389,36 @@ def signal_curves(points: tuple[CalibrationPoint, ...], reports: list[dict]) -> 
 
 
 def build_run_report(*, mode: str, loaded: LoadedCorpus, manifest_sha256: str, cases: tuple[LoadedCase, ...],
-                     runs: list[CaseRun], settings, resources: dict) -> dict:
+                     runs: list[CaseRun], settings, resources: dict, environment: config.Environment,
+                     environment_changed: bool = False) -> dict:
     manifest = loaded.manifest
     points = calibration_grid(settings.compute_alternate_view)
     by_id = {run.case_id: run for run in runs}
+    budget = production_budget_s()
     reports = []
     for index, point in enumerate(points):
-        replayed = [replay(case, by_id[case.case_id], point) for case in cases]
+        replayed = [replay(case, by_id[case.case_id], point, budget) for case in cases]
         aggregate = aggregate_metrics(loaded, tuple(item for item, _ in replayed), mode=mode)
+        decisions = [decision for _, decision in replayed if decision is not None]
         reports.append({"index": index, "thresholds": point.model_dump(mode="json"),
                         "aggregate": aggregate["aggregate"], "groups": aggregate["groups"],
-                        "case_decisions": [decision for _, decision in replayed if decision is not None]})
+                        "unreplayable_cases": sum(1 for decision in decisions if decision[3]),
+                        "case_decisions": decisions})
     policy = settings.verification
     return {
         "schema_version": REPORT_SCHEMA_VERSION, "mode": mode, "created_at": _now(),
-        "quality_measurement_eligible": mode == "calibration", "acceptance_decision": None,
+        "quality_measurement_eligible": mode == "calibration" and not environment_changed,
+        "environment_changed_during_run": environment_changed, "acceptance_decision": None,
         "manifest_sha256": manifest_sha256, "manifest_schema_version": manifest.schema_version,
         "split": manifest.split, "purpose": manifest.purpose,
         "eligibility_reasons": {"calibration": list(manifest.eligibility_reasons("calibration")),
                                 "benchmark": list(manifest.eligibility_reasons("benchmark"))},
         "selected_all_cases": len(cases) == len(manifest.cases), "case_count": len(cases),
-        "environment": config.current_environment().model_dump(mode="json"),
+        "environment": environment.model_dump(mode="json"),
         "collection": {"policy": policy.model_dump(mode="json"), "matching_margin": settings.matching_margin,
-                       "compute_alternate_view": settings.compute_alternate_view, "keep_trace": settings.keep_trace},
+                       "compute_alternate_view": settings.compute_alternate_view, "keep_trace": settings.keep_trace,
+                       "processing_budget_s": settings.processing_budget_s},
+        "replay_processing_budget_s": budget,
         "selection_rule": SELECTION_RULE, "page_time_basis": PAGE_TIME_BASIS,
         "points": reports, "curves": signal_curves(points, reports),
         "cases": [case_row(by_id[case.case_id]) for case in cases],
@@ -439,6 +489,9 @@ async def run_command(args) -> dict:
         raise RunnerError("mismatch_display_not_permitted")
     manifest_sha = _sha256_file(args.manifest)
     settings = collection_settings(compute_alternate_view=not args.no_alternate)
+    # The identity of the code and prompts this run uses is taken before the runtime
+    # starts; a change on disk during the run makes the report ineligible.
+    environment = config.current_environment()
     tmp_root = args.data_root / "tmp"
     tmp_root.mkdir(parents=True, exist_ok=True)
     runs: list[CaseRun] = []
@@ -446,17 +499,23 @@ async def run_command(args) -> dict:
         async with ResourceSampler(pid) as sampler:
             for case in cases:
                 runs.append(await execute_case(core, case, tmp_root))
+    changed = config.current_environment() != environment
     report = build_run_report(mode=args.mode, loaded=loaded, manifest_sha256=manifest_sha, cases=cases,
-                              runs=runs, settings=settings, resources=sampler.report())
+                              runs=runs, settings=settings, resources=sampler.report(), environment=environment,
+                              environment_changed=changed)
     if args.show_mismatches:
         _show_mismatches(cases, runs)
     _write_json(args.output, report)
+    if changed:
+        raise RunnerError("environment_changed_during_run")
     return report
 
 
 def _zero_error(point: dict) -> bool:
+    """Zero errors that the point is known to make; unreplayable cases may hide errors."""
     aggregate = point["aggregate"]
-    return aggregate["incorrect_accepted_values"] == 0 and aggregate["incorrect_automatic_profile_selections"] == 0
+    return (aggregate["incorrect_accepted_values"] == 0 and aggregate["incorrect_automatic_profile_selections"] == 0
+            and point["unreplayable_cases"] == 0)
 
 
 def select_point(points: list[dict]) -> int:
@@ -484,7 +543,8 @@ def freeze(report_path: Path, output: Path, *, point_index: int | None, auto: bo
                 or report["quality_measurement_eligible"] is not True):
             raise RunnerError("calibration_report_required")
         recorded = config.Environment.model_validate(report["environment"])
-        if [point["index"] for point in points] != list(range(len(points))):
+        if [point["index"] for point in points] != list(range(len(points))) or any(
+                type(point["unreplayable_cases"]) is not int for point in points):
             raise RunnerError("invalid_calibration_report")
     except (OSError, ValueError, KeyError, TypeError):
         raise RunnerError("invalid_calibration_report") from None
@@ -520,7 +580,8 @@ def freeze(report_path: Path, output: Path, *, point_index: int | None, auto: bo
         calibration=config.CalibrationProvenance(tuning_manifest_sha256=report["manifest_sha256"],
                                                  calibration_report_sha256=hashlib.sha256(data).hexdigest(),
                                                  point_index=index, selection_rule=rule),
-        code_sha256=current.code_sha256, page_times=config.page_time_summary(samples),
+        code_sha256=current.code_sha256, dependencies=current.dependencies,
+        page_times=config.page_time_summary(samples),
     )
     return frozen, config.write_frozen(frozen, output)
 
@@ -549,9 +610,14 @@ def _ledger_append(path: Path, entry: dict) -> None:
         os.fsync(stream.fileno())
 
 
-def check_ledger(entries: list[dict], config_sha256: str, acknowledge: str | None) -> str | None:
-    """Enforce one benchmark run per frozen configuration; return an acknowledged run ID."""
-    runs = [entry for entry in entries if entry.get("config_sha256") == config_sha256]
+def check_ledger(entries: list[dict], config_sha256: str, behavior_sha256: str, acknowledge: str | None) -> str | None:
+    """Enforce one benchmark run per frozen configuration and per behavior identity.
+
+    A configuration frozen again from the same calibration (a new file hash, the same
+    environment and policy) is the same configuration. Returns an acknowledged run ID.
+    """
+    runs = [entry for entry in entries
+            if entry.get("config_sha256") == config_sha256 or entry.get("behavior_sha256") == behavior_sha256]
     if any(entry["event"] == "completed" for entry in runs):
         raise RunnerError("benchmark_already_run")
     closed = {entry["run_id"] for entry in runs if entry["event"] == "acknowledged"}
@@ -577,19 +643,28 @@ async def benchmark_command(args) -> dict:
     registry = tuple(load_corpus(path, verify_files=False).manifest for path in args.registry)
     if not any(item.split == "tuning" for item in registry):
         raise RunnerError("benchmark_registry_requires_tuning_manifest")
+    # Separation must be checked against the tuning manifest the thresholds were calibrated on.
+    if frozen.calibration.tuning_manifest_sha256 not in {_sha256_file(path) for path in args.registry}:
+        raise RunnerError("benchmark_registry_missing_calibration_manifest")
     validate_split_separation(manifest, *registry)
-    mismatches = config.environment_mismatches(frozen.environment(), config.current_environment())
+    environment = config.current_environment()
+    mismatches = config.environment_mismatches(frozen.environment(), environment)
     if mismatches:
         raise RunnerError(mismatches[0])
     ledger = args.data_root / LEDGER
     manifest_sha = _sha256_file(args.manifest)
-    acknowledged = check_ledger(_ledger_entries(ledger), config_sha, args.acknowledge_incomplete_run)
+    behavior_sha, case_set_sha = config.behavior_sha256(frozen), case_set_sha256(manifest)
+    entries = _ledger_entries(ledger)
+    acknowledged = check_ledger(entries, config_sha, behavior_sha, args.acknowledge_incomplete_run)
+    # Another configuration may run on the same cases only after remediation; make that visible.
+    prior = sorted({str(entry.get("run_id")) for entry in entries
+                    if entry["event"] == "completed" and entry.get("case_set_sha256") == case_set_sha})
+    identity = {"config_sha256": config_sha, "behavior_sha256": behavior_sha, "manifest_sha256": manifest_sha,
+                "case_set_sha256": case_set_sha}
     if acknowledged:
-        _ledger_append(ledger, {"event": "acknowledged", "run_id": acknowledged, "config_sha256": config_sha,
-                                "manifest_sha256": manifest_sha, "utc": _now()})
+        _ledger_append(ledger, {"event": "acknowledged", "run_id": acknowledged, **identity, "utc": _now()})
     run_id = uuid.uuid4().hex
-    _ledger_append(ledger, {"event": "started", "run_id": run_id, "config_sha256": config_sha,
-                            "manifest_sha256": manifest_sha, "utc": _now()})
+    _ledger_append(ledger, {"event": "started", "run_id": run_id, **identity, "utc": _now()})
     settings = frozen.core_settings()
     tmp_root = args.data_root / "tmp"
     tmp_root.mkdir(parents=True, exist_ok=True)
@@ -598,6 +673,7 @@ async def benchmark_command(args) -> dict:
         async with ResourceSampler(pid) as sampler:
             for case in loaded.cases:
                 runs.append(await execute_case(core, case, tmp_root))
+    changed = config.current_environment() != environment
     observations = tuple(observation(run.case_id, run.state, run.result) for run in runs)
     metrics = aggregate_metrics(loaded, observations, mode="benchmark", registry=registry)
     rows = [case_row(run) for run in runs]
@@ -607,9 +683,12 @@ async def benchmark_command(args) -> dict:
     report = {
         "schema_version": REPORT_SCHEMA_VERSION, "mode": "benchmark", "run_id": run_id, "created_at": _now(),
         "manifest_sha256": manifest_sha, "frozen_configuration_sha256": config_sha,
-        "environment": config.current_environment().model_dump(mode="json"),
+        "behavior_sha256": behavior_sha, "case_set_sha256": case_set_sha,
+        "prior_completed_runs_on_case_set": prior,
+        "environment": environment.model_dump(mode="json"), "environment_changed_during_run": changed,
         "policy": frozen.policy.model_dump(mode="json"), "registry_splits": [item.split for item in registry],
-        "quality_measurement_eligible": metrics["quality_measurement_eligible"], "acceptance_decision": None,
+        "quality_measurement_eligible": metrics["quality_measurement_eligible"] and not changed,
+        "acceptance_decision": None,
         "aggregate": metrics["aggregate"], "groups": metrics["groups"],
         "page_times": [item.model_dump(mode="json") for item in page_times], "page_time_basis": PAGE_TIME_BASIS,
         "timing": timing_summary(runs), "resources": sampler.report(),
@@ -617,8 +696,11 @@ async def benchmark_command(args) -> dict:
         "cases": rows,
     }
     _write_json(args.output, report)
-    _ledger_append(ledger, {"event": "completed", "run_id": run_id, "config_sha256": config_sha,
-                            "manifest_sha256": manifest_sha, "utc": _now()})
+    # The run consumed the sealed set even when its environment changed underneath it.
+    _ledger_append(ledger, {"event": "completed", "run_id": run_id, **identity,
+                            "environment_changed_during_run": changed, "utc": _now()})
+    if changed:
+        raise RunnerError("environment_changed_during_run")
     return report
 
 

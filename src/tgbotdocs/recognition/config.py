@@ -10,10 +10,12 @@ from __future__ import annotations
 from dataclasses import MISSING, asdict, fields
 from datetime import datetime
 import hashlib
+from importlib import metadata
 import inspect
 import json
 import math
 from pathlib import Path
+import sys
 from typing import Literal
 
 from pydantic import Field, StrictBool, StrictFloat, StrictInt, StrictStr, ValidationError, field_validator
@@ -103,14 +105,26 @@ class PromptIdentity(ContractModel):
     _hash = field_validator("sha256")(_sha256)
 
 
+class Dependencies(ContractModel):
+    """Interpreter and installed distributions that render pages, parse replies or reach the runtime."""
+
+    python: StrictStr
+    httpx: StrictStr
+    pillow: StrictStr
+    pypdfium2: StrictStr
+    pydantic: StrictStr
+    pydantic_core: StrictStr
+
+
 class Environment(ContractModel):
-    """What the checkout and pinned runtime determine; compared before freeze and benchmark."""
+    """What the checkout, installed dependencies and pinned runtime determine; compared before freeze and benchmark."""
 
     code_sha256: StrictStr
     prompt: PromptIdentity
     runtime_artifacts: RuntimeArtifacts
     runtime_profile: RuntimeValues
     core: CoreValues
+    dependencies: Dependencies
 
     _hash = field_validator("code_sha256")(_sha256)
 
@@ -159,6 +173,7 @@ class FrozenConfiguration(ContractModel):
     corpus_manifest_schema_version: Literal[1]
     calibration: CalibrationProvenance
     code_sha256: StrictStr
+    dependencies: Dependencies
     page_times: tuple[PageTimes, ...] = ()
 
     _hash = field_validator("code_sha256")(_sha256)
@@ -179,7 +194,7 @@ class FrozenConfiguration(ContractModel):
 
     def environment(self) -> Environment:
         return Environment(code_sha256=self.code_sha256, prompt=self.prompt, runtime_artifacts=self.runtime_artifacts,
-                           runtime_profile=self.runtime_profile, core=self.core)
+                           runtime_profile=self.runtime_profile, core=self.core, dependencies=self.dependencies)
 
     def core_settings(self, *, keep_trace: bool = False) -> CoreSettings:
         return core_settings(self.policy.verification(), self.policy.matching_margin,
@@ -248,17 +263,43 @@ def prompt_identity() -> PromptIdentity:
     return PromptIdentity(version=prompts.PROMPT_VERSION, sha256=hashlib.sha256(canonical_json(payload)).hexdigest())
 
 
+def dependency_versions() -> Dependencies:
+    """Python version and installed versions of the distributions that shape model input or decisions."""
+
+    def version(name: str) -> str:
+        try:
+            return metadata.version(name)
+        except metadata.PackageNotFoundError:
+            return "not_installed"
+
+    return Dependencies(python=".".join(str(part) for part in sys.version_info[:3]), httpx=version("httpx"),
+                        pillow=version("Pillow"), pypdfium2=version("pypdfium2"), pydantic=version("pydantic"),
+                        pydantic_core=version("pydantic-core"))
+
+
 def current_environment() -> Environment:
     return Environment(code_sha256=current_code_hash(), prompt=prompt_identity(),
                        runtime_artifacts=runtime_artifacts(),
-                       runtime_profile=RuntimeValues(**asdict(RuntimeProfile())), core=default_core_values())
+                       runtime_profile=RuntimeValues(**asdict(RuntimeProfile())), core=default_core_values(),
+                       dependencies=dependency_versions())
 
 
 def environment_mismatches(expected: Environment, actual: Environment) -> tuple[str, ...]:
     checks = (("code_sha256", "code_hash_mismatch"), ("prompt", "prompt_mismatch"),
               ("runtime_artifacts", "runtime_artifacts_mismatch"), ("runtime_profile", "runtime_profile_mismatch"),
-              ("core", "core_settings_mismatch"))
+              ("core", "core_settings_mismatch"), ("dependencies", "dependency_versions_mismatch"))
     return tuple(code for name, code in checks if getattr(expected, name) != getattr(actual, name))
+
+
+def behavior_sha256(config: FrozenConfiguration) -> str:
+    """Identity of what a benchmark run measures: environment and policy.
+
+    Unlike the file hash it excludes the creation time, calibration provenance and
+    admission page times, so freezing the same point again yields the same identity.
+    """
+    payload = {"environment": config.environment().model_dump(mode="json"),
+               "policy": config.policy.model_dump(mode="json")}
+    return hashlib.sha256(canonical_json(payload)).hexdigest()
 
 
 def page_time_summary(samples: dict[str, list[float]]) -> tuple[PageTimes, ...]:

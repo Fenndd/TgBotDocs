@@ -8,18 +8,20 @@ import pytest
 from tgbotdocs.recognition import config, prompts
 
 
-def make_frozen(**policy):
+def make_frozen(*, tuning_manifest_sha256="a" * 64, created_at=datetime(2026, 9, 27, 12, tzinfo=timezone.utc),
+                **policy):
     environment = config.current_environment()
     values = {"min_token_probability": 0.9, "check_alternate_view": False, "check_declared_format": True,
               "matching_margin": 0.2, **policy}
     return config.FrozenConfiguration(
-        schema_version=1, created_at=datetime(2026, 9, 27, 12, tzinfo=timezone.utc),
+        schema_version=1, created_at=created_at,
         runtime_artifacts=environment.runtime_artifacts, runtime_profile=environment.runtime_profile,
         core=environment.core, prompt=environment.prompt, policy=config.FrozenPolicy(**values),
         corpus_manifest_schema_version=1,
-        calibration=config.CalibrationProvenance(tuning_manifest_sha256="a" * 64, calibration_report_sha256="b" * 64,
+        calibration=config.CalibrationProvenance(tuning_manifest_sha256=tuning_manifest_sha256,
+                                                 calibration_report_sha256="b" * 64,
                                                  point_index=3, selection_rule="test rule"),
-        code_sha256=environment.code_sha256,
+        code_sha256=environment.code_sha256, dependencies=environment.dependencies,
         page_times=(config.PageTimes(kind="png", count=2, p5=1.0, p50=2.0, p95=3.0),),
     )
 
@@ -121,3 +123,21 @@ def test_timestamps_must_be_utc():
     for created in (datetime(2026, 1, 1, tzinfo=timezone(timedelta(hours=3))), datetime(2026, 1, 1)):
         with pytest.raises(ValueError, match="utc_timestamp_required"):
             config.FrozenConfiguration.model_validate({**data, "created_at": created})
+
+
+def test_behavior_identity_ignores_creation_time_and_provenance_only():
+    base = make_frozen()
+    same = make_frozen(created_at=datetime(2027, 1, 1, tzinfo=timezone.utc), tuning_manifest_sha256="f" * 64)
+    assert config.configuration_sha256(base) != config.configuration_sha256(same)
+    assert config.behavior_sha256(base) == config.behavior_sha256(same)
+    assert config.behavior_sha256(base) != config.behavior_sha256(make_frozen(matching_margin=0.3))
+    changed = base.model_copy(update={"code_sha256": "0" * 64})
+    assert config.behavior_sha256(base) != config.behavior_sha256(changed)
+
+
+def test_dependency_versions_are_part_of_the_environment():
+    current = config.current_environment()
+    assert current.dependencies == config.dependency_versions() == make_frozen().dependencies
+    assert current.dependencies.python.count(".") == 2 and current.dependencies.pillow != "not_installed"
+    upgraded = current.model_copy(update={"dependencies": current.dependencies.model_copy(update={"pillow": "99.0"})})
+    assert config.environment_mismatches(upgraded, current) == ("dependency_versions_mismatch",)

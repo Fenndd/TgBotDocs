@@ -8,7 +8,8 @@ import pytest
 
 from tgbotdocs.recognition.adapter import ModelError, ModelReply, TokenScore
 from tgbotdocs.recognition.contracts import ExtractionProfile, ScalarField, ListField, FormatValidator
-from tgbotdocs.recognition.core import (CoreSettings, JobObserver, ProcessingBudget, RecognitionCore, decide,
+from tgbotdocs.recognition.core import (BatchTrace, CoreSettings, JobObserver, JobTrace, ProcessingBudget,
+                                        RecognitionCore, StageFailure, decide,
                                         probability_map, verify_batch)
 from tgbotdocs.recognition.prompts import matching_schema, parse_batch
 from tgbotdocs.recognition.runtime import RuntimeProfile
@@ -435,3 +436,93 @@ async def test_observer_keeps_content_free_progress_of_a_failed_job(tmp_path, pr
             files, (profile,), scratch=scratch, selected_profile=profile, observer=observer)
     assert [c.kind for c in observer.calls] == ["token_count", "extraction", "extraction"]
     assert observer.contract_retries == 1 and observer.page_kinds == ("png",) and observer.preparation_s > 0
+
+
+async def test_failure_after_a_weak_match_is_raised_only_where_extraction_happens(tmp_path, profile):
+    snapshots = (profile, second(profile))
+    files, scratch = images(tmp_path, 1)
+    observer = JobObserver()
+    collector = RecognitionCore(FakeAdapter([matching_reply(1, (0.7, 0.2)), "invalid", "still invalid"]), CoreSettings(
+        runtime=RuntimeProfile(), verification=VerificationPolicy(), matching_margin=0.0,
+        compute_alternate_view=True, keep_trace=True))
+    with pytest.raises(ModelError, match="^recognition_contract_violation$"):
+        await collector.recognize(files, snapshots, scratch=scratch, observer=observer)
+    trace = observer.trace
+    assert not trace.batches and trace.failure.code == "recognition_contract_violation"
+    # A margin above 0.5 stops at "uncertain" and never makes the failing call.
+    assert decide(trace, snapshots, policy=VerificationPolicy(), matching_margin=0.6).matching.status == "uncertain"
+    with pytest.raises(ModelError, match="^recognition_contract_violation$"):
+        decide(trace, snapshots, policy=VerificationPolicy(), matching_margin=0.3)
+    assert not list(scratch.iterdir())
+
+
+def recorded(profile, *, pages=1, alternate_error=None, failure=None):
+    """Trace of a manual-profile job: 100 s setup, batch 0 with 500 s primary and 1500 s alternate."""
+    data = batch((1,))
+    parsed = parse_batch(json.dumps(data), profile, (1,))
+    item = BatchTrace(parsed, probability_map(reply(data), parsed), None if alternate_error else parsed, True,
+                      primary_s=500.0, alternate_s=1500.0, alternate_error=alternate_error)
+    return JobTrace(page_ids=tuple(range(1, pages + 1)), page_kinds=("png",) * pages, matching=None,
+                    candidate_probabilities=None, manual_profile=profile, batches=(item,), calls=(),
+                    preparation_s=0.0, setup_s=100.0, failure=failure)
+
+
+V2_OFF, V2_ON = VerificationPolicy(), VerificationPolicy(check_alternate_view=True)
+
+
+def replayed(trace, profile, policy, budget=1800.0):
+    return decide(trace, (profile,), policy=policy, matching_margin=0.0, processing_budget_s=budget)
+
+
+def test_replay_times_out_each_policy_on_its_own_calls(profile):
+    trace = recorded(profile)
+    assert replayed(trace, profile, V2_OFF).recognition.outcome == "complete"
+    with pytest.raises(ModelError, match="^processing_budget_exhausted$"):
+        replayed(trace, profile, V2_ON)
+    assert replayed(trace, profile, V2_ON, budget=2500.0).recognition.outcome == "complete"
+    # The recording job made the alternate calls, so their time counts for it.
+    with pytest.raises(ModelError, match="^processing_budget_exhausted$"):
+        decide(trace, (profile,), policy=V2_OFF, matching_margin=0.0, processing_budget_s=1800.0,
+               alternate_calls=True)
+
+
+def test_recorded_failures_apply_only_where_they_are_determined(profile):
+    exhausted = StageFailure("model", "processing_budget_exhausted", 100.0, 2200.0)
+    trace = recorded(profile, pages=2, failure=exhausted)
+    # The recording job ran out of its extended budget partly on alternate calls V2-off skips.
+    with pytest.raises(ValueError, match="trace_undetermined_for_policy"):
+        replayed(trace, profile, V2_OFF)
+    with pytest.raises(ModelError, match="^processing_budget_exhausted$"):
+        replayed(trace, profile, V2_ON)
+    violation = StageFailure("model", "recognition_contract_violation", 10.0, 2110.0)
+    with pytest.raises(ModelError, match="^recognition_contract_violation$"):
+        replayed(recorded(profile, pages=2, failure=violation), profile, V2_OFF)
+    # A skipped alternate call that failed at runtime level may have caused the later failure.
+    crashed = StageFailure("model", "runtime_unavailable", 1500.0, 2100.0)
+    trace = recorded(profile, pages=2, alternate_error=crashed, failure=violation)
+    with pytest.raises(ValueError, match="trace_undetermined_for_policy"):
+        replayed(trace, profile, V2_OFF, budget=5000.0)
+    with pytest.raises(ModelError, match="^runtime_unavailable$"):
+        replayed(trace, profile, V2_ON, budget=5000.0)
+    invalid = StageFailure("model", "recognition_contract_violation", 1500.0, 2100.0)
+    with pytest.raises(ModelError, match="^recognition_contract_violation$"):
+        replayed(recorded(profile, pages=2, alternate_error=invalid, failure=violation), profile, V2_OFF,
+                 budget=5000.0)
+    assert replayed(recorded(profile, alternate_error=crashed), profile, V2_OFF).recognition.outcome == "complete"
+
+
+async def test_alternate_failure_is_recorded_and_fails_only_an_enforcing_job(tmp_path, profile):
+    files, scratch = images(tmp_path, 1)
+    answers = [batch((1,), "AB-001"), "invalid alternate", "invalid alternate again"]
+    collected = await RecognitionCore(FakeAdapter(list(answers)), CoreSettings(
+        runtime=RuntimeProfile(), verification=VerificationPolicy(), matching_margin=0.1,
+        compute_alternate_view=True, keep_trace=True)).recognize(files, (profile,), scratch=scratch,
+                                                                 selected_profile=profile)
+    assert collected.recognition.fields[0].accepted_value == "AB-001"
+    assert collected.trace.batches[0].alternate_error.code == "recognition_contract_violation"
+    with pytest.raises(ModelError, match="^recognition_contract_violation$"):
+        await RecognitionCore(FakeAdapter(list(answers)), CoreSettings(
+            runtime=RuntimeProfile(), verification=VerificationPolicy(check_alternate_view=True),
+            matching_margin=0.1, compute_alternate_view=True)).recognize(files, (profile,), scratch=scratch,
+                                                                        selected_profile=profile)
+    assert not list(scratch.iterdir())

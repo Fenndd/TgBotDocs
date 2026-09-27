@@ -9,7 +9,7 @@ from PIL import Image
 import pytest
 
 from test_config import make_frozen
-from test_core import FakeAdapter, batch as wire_batch
+from test_core import FakeAdapter, batch as wire_batch, matching_reply
 from tgbotdocs.recognition import config, runner
 from tgbotdocs.recognition.adapter import ModelError
 from tgbotdocs.recognition.contracts import (BatchResult, ExtractionProfile, FieldResult, MatchingResponse,
@@ -142,8 +142,11 @@ class ScriptedCore:
         trace = JobTrace(page_ids=(1,), page_kinds=("png",), matching=raw, candidate_probabilities=candidates,
                          manual_profile=None, batches=batches, calls=tuple(observer.calls),
                          preparation_s=observer.preparation_s)
+        if self.settings.keep_trace:
+            observer.trace = trace
         result = decide(trace, snapshots, policy=self.settings.verification,
-                        matching_margin=self.settings.matching_margin)
+                        matching_margin=self.settings.matching_margin,
+                        alternate_calls=self.settings.compute_alternate_view)
         return replace(result, trace=trace if self.settings.keep_trace else None)
 
 
@@ -225,12 +228,13 @@ def test_calibration_replays_every_point_and_auto_freeze_selects_the_documented_
     assert frozen.code_sha256 == config.current_code_hash()
 
 
-def point(index, *, errors=0, profiles=0, completeness=0.95, v1=None, v2=False, margin=0.0, decisions=()):
+def point(index, *, errors=0, profiles=0, completeness=0.95, v1=None, v2=False, margin=0.0, decisions=(),
+          unreplayable=0):
     return {"index": index, "thresholds": {"v1_min_token_probability": v1, "v2_alternate_view": v2,
                                            "v3_declared_format": True, "matching_margin": margin},
             "aggregate": {"incorrect_accepted_values": errors, "incorrect_automatic_profile_selections": profiles,
                           "rates": {"readable_completeness": completeness}},
-            "case_decisions": list(decisions)}
+            "unreplayable_cases": unreplayable, "case_decisions": list(decisions)}
 
 
 def test_auto_selection_prefers_completeness_then_v2_off_then_higher_thresholds():
@@ -242,10 +246,13 @@ def test_auto_selection_prefers_completeness_then_v2_off_then_higher_thresholds(
     assert runner.select_point(points) == 7
     with pytest.raises(runner.RunnerError, match="calibration_no_zero_error_point"):
         runner.select_point([point(0, errors=1), point(1, profiles=2)])
+    # A case whose outcome at a point is unknown may hide an error there.
+    with pytest.raises(runner.RunnerError, match="calibration_no_zero_error_point"):
+        runner.select_point([point(0, unreplayable=1)])
 
 
 def calibration_report(tmp_path, points, **overrides):
-    report = {"schema_version": 1, "mode": "calibration", "quality_measurement_eligible": True,
+    report = {"schema_version": runner.REPORT_SCHEMA_VERSION, "mode": "calibration", "quality_measurement_eligible": True,
               "selected_all_cases": True, "environment": config.current_environment().model_dump(mode="json"),
               "manifest_sha256": "c" * 64, "manifest_schema_version": 1, "points": points, "cases": [], **overrides}
     path = tmp_path / f"report-{len(list(tmp_path.iterdir()))}.json"
@@ -336,9 +343,11 @@ def test_run_refusals_happen_before_the_runtime_starts(tmp_path, scripted, capsy
     assert scripted["cores"] == [] and not output.exists()
 
 
-def frozen_file(tmp_path, **policy):
-    path = tmp_path / "frozen.json"
-    return path, config.write_frozen(make_frozen(**policy), path)
+def frozen_file(tmp_path, registry, *, name="frozen.json", **values):
+    """A frozen configuration calibrated on the tuning manifest file ``registry``."""
+    path = tmp_path / name
+    tuning = hashlib.sha256(registry.read_bytes()).hexdigest()
+    return path, config.write_frozen(make_frozen(tuning_manifest_sha256=tuning, **values), path)
 
 
 def benchmark_args(tmp_path, manifest, frozen, registry, output, *extra):
@@ -348,7 +357,7 @@ def benchmark_args(tmp_path, manifest, frozen, registry, output, *extra):
 
 def test_benchmark_runs_once_per_frozen_configuration(tmp_path, scripted, capsys):
     registry = tuning_corpus(tmp_path)
-    frozen, digest = frozen_file(tmp_path, min_token_probability=0.9, matching_margin=0.2)
+    frozen, digest = frozen_file(tmp_path, registry, min_token_probability=0.9, matching_margin=0.2)
     manifest = benchmark_corpus(tmp_path, digest)
     scripted["scenarios"].update({f"bench-{i}": {"matching": "not_document"} for i in range(60, 70)})
     output = tmp_path / "benchmark.json"
@@ -366,16 +375,35 @@ def test_benchmark_runs_once_per_frozen_configuration(tmp_path, scripted, capsys
     ledger = [json.loads(line) for line in (tmp_path / "data" / "ledger" / "benchmark-runs.jsonl").read_text().splitlines()]
     assert [entry["event"] for entry in ledger] == ["started", "completed"]
     assert {entry["run_id"] for entry in ledger} == {report["run_id"]}
+    assert report["prior_completed_runs_on_case_set"] == [] and not report["environment_changed_during_run"]
     capsys.readouterr()
     assert runner.main(benchmark_args(tmp_path, manifest, frozen, registry, tmp_path / "again.json")) == 2
     assert capsys.readouterr().err == "error: benchmark_already_run\n"
     assert len(scripted["cores"]) == 1 and not (tmp_path / "again.json").exists()
 
+    # Freezing the same point again gives a new file hash but the same behavior: refused.
+    refrozen, refrozen_digest = frozen_file(tmp_path, registry, name="refrozen.json", min_token_probability=0.9,
+                                            matching_margin=0.2, created_at=datetime(2026, 9, 28, tzinfo=timezone.utc))
+    assert refrozen_digest != digest
+    resealed = benchmark_corpus(tmp_path, refrozen_digest, name="resealed")
+    assert runner.main(benchmark_args(tmp_path, resealed, refrozen, registry, tmp_path / "again.json")) == 2
+    assert capsys.readouterr().err == "error: benchmark_already_run\n"
+    assert len(scripted["cores"]) == 1
+
+    # A different configuration may run on the same cases (remediation); the report shows the earlier run.
+    other, other_digest = frozen_file(tmp_path, registry, name="other.json", min_token_probability=0.95,
+                                      matching_margin=0.2)
+    remediated = benchmark_corpus(tmp_path, other_digest, name="remediated")
+    assert runner.main(benchmark_args(tmp_path, remediated, other, registry, tmp_path / "second.json")) == 0
+    second = json.loads((tmp_path / "second.json").read_text(encoding="utf-8"))
+    assert second["prior_completed_runs_on_case_set"] == [report["run_id"]]
+    assert second["behavior_sha256"] != report["behavior_sha256"]
+
 
 def test_benchmark_refuses_mismatches_and_requires_acknowledging_incomplete_runs(
         tmp_path, scripted, capsys, monkeypatch):
     registry = tuning_corpus(tmp_path)
-    frozen, digest = frozen_file(tmp_path)
+    frozen, digest = frozen_file(tmp_path, registry)
     output = tmp_path / "benchmark.json"
     other = benchmark_corpus(tmp_path, "e" * 64, name="other")
     assert runner.main(benchmark_args(tmp_path, other, frozen, registry, output)) == 2
@@ -383,6 +411,12 @@ def test_benchmark_refuses_mismatches_and_requires_acknowledging_incomplete_runs
     manifest = benchmark_corpus(tmp_path, digest)
     assert runner.main(benchmark_args(tmp_path, manifest, frozen, manifest, output)) == 2
     assert capsys.readouterr().err == "error: benchmark_registry_requires_tuning_manifest\n"
+    # A tuning registry that is not the manifest the configuration was calibrated on.
+    stale = tmp_path / "stale.json"
+    stale_digest = config.write_frozen(make_frozen(tuning_manifest_sha256="a" * 64), stale)
+    stale_bench = benchmark_corpus(tmp_path, stale_digest, name="stale-bench")
+    assert runner.main(benchmark_args(tmp_path, stale_bench, stale, registry, output)) == 2
+    assert capsys.readouterr().err == "error: benchmark_registry_missing_calibration_manifest\n"
     with monkeypatch.context() as patch:
         patch.setattr(config, "current_code_hash", lambda directory=None: "0" * 64)
         assert runner.main(benchmark_args(tmp_path, manifest, frozen, registry, output)) == 2
@@ -402,16 +436,21 @@ def test_benchmark_refuses_mismatches_and_requires_acknowledging_incomplete_runs
 
 
 def test_ledger_rules():
-    started = {"event": "started", "run_id": "r1", "config_sha256": "x"}
-    assert runner.check_ledger([], "x", None) is None
-    assert runner.check_ledger([started], "y", None) is None
+    started = {"event": "started", "run_id": "r1", "config_sha256": "x", "behavior_sha256": "bx"}
+    assert runner.check_ledger([], "x", "bx", None) is None
+    assert runner.check_ledger([started], "y", "by", None) is None
     with pytest.raises(runner.RunnerError, match="unknown_incomplete_run"):
-        runner.check_ledger([], "x", "r1")
-    assert runner.check_ledger([started], "x", "r1") == "r1"
+        runner.check_ledger([], "x", "bx", "r1")
+    assert runner.check_ledger([started], "x", "bx", "r1") == "r1"
+    # An incomplete run of the same behavior under another file hash also needs acknowledging.
+    with pytest.raises(runner.RunnerError, match="benchmark_incomplete_run_requires_acknowledgement"):
+        runner.check_ledger([started], "y", "bx", None)
     acknowledged = {**started, "event": "acknowledged"}
-    with pytest.raises(runner.RunnerError, match="benchmark_already_run"):
-        runner.check_ledger([started, acknowledged, {**started, "run_id": "r2"},
-                             {**started, "run_id": "r2", "event": "completed"}], "x", None)
+    completed = [started, acknowledged, {**started, "run_id": "r2"}, {**started, "run_id": "r2", "event": "completed"}]
+    for config_sha, behavior_sha in (("x", "bx"), ("y", "bx"), ("x", "by")):
+        with pytest.raises(runner.RunnerError, match="benchmark_already_run"):
+            runner.check_ledger(completed, config_sha, behavior_sha, None)
+
 
 
 async def test_real_core_run_records_traces_and_removes_renders(tmp_path, monkeypatch):
@@ -449,3 +488,122 @@ async def test_real_core_run_records_traces_and_removes_renders(tmp_path, monkey
     by_v2 = {entry["value"]: entry for entry in report["curves"]["v2_with_v1_off_margin_0"]}
     assert by_v2[False]["accepted_values"] == 2 and by_v2[True]["accepted_values"] == 1
     assert report["resources"]["peak_gpu_memory_used_mib"] is None
+
+
+def point_at(report, v1, v2, margin):
+    return next(item for item in report["points"] if item["thresholds"] == {
+        "v1_min_token_probability": v1, "v2_alternate_view": v2, "v3_declared_format": True,
+        "matching_margin": margin})
+
+
+async def test_replay_reports_call_failures_only_at_points_that_make_the_failing_call(tmp_path, monkeypatch):
+    """Real core; only the model is fake. A failed alternate or a failure after a weak match
+    must not hide what a point that never makes that call would have accepted."""
+    root = tmp_path / "tuning"
+    root.mkdir()
+    cases = [make_case(root, f"tune-{i:02d}", i, "readable", split="tuning") for i in range(2)]
+    manifest = write_manifest(root, cases, split="tuning")
+    matched = {"status": "matched", "profile_index": 1, "type_description": None}
+    misread = {"fields": {"code": {"s": "extracted", "v": "WRONG-00", "p": [1]}}, "lists": {},
+               "membership": {"1": "yes"}}
+    answers = [matched, misread, "invalid alternate", "invalid alternate again",
+               # A match whose probability margin is 0.6, then an extraction contract violation.
+               matching_reply(1, (0.6,)), "invalid extraction", "invalid extraction again"]
+    adapters = []
+
+    @asynccontextmanager
+    async def opener(data_root, settings):
+        adapters.append(FakeAdapter(answers, image_tokens=500))
+        yield RecognitionCore(adapters[-1], settings), lambda: None
+
+    monkeypatch.setattr(runner, "open_core", opener)
+    monkeypatch.setattr(runner, "query_gpu_memory_mib", lambda: None)
+    report = await runner.run_command(runner.build_parser().parse_args([
+        "run", "--manifest", str(manifest), "--mode", "diagnostics", "--data-root", str(tmp_path / "data"),
+        "--output", str(tmp_path / "report.json")]))
+    assert not adapters[0].answers and not any((tmp_path / "data" / "tmp").iterdir())
+    rows = {row["case_id"]: row for row in report["cases"]}
+    # The collecting job survives its own alternate failure but not the extraction failure.
+    assert (rows["tune-00"]["execution_state"], rows["tune-00"]["error_code"]) == ("completed", None)
+    assert (rows["tune-01"]["execution_state"], rows["tune-01"]["error_code"]) == (
+        "failed", "recognition_contract_violation")
+    assert all(item["unreplayable_cases"] == 0 for item in report["points"])
+
+    def summary(v1, v2, margin):
+        aggregate = point_at(report, v1, v2, margin)["aggregate"]
+        return (aggregate["incorrect_accepted_values"], aggregate["completed_cases"], aggregate["failed_cases"])
+
+    # Without V2 the misread value is accepted: an error, not a failed case.
+    assert summary(None, False, 0.0) == (1, 1, 1)
+    # A margin above 0.6 stops at "uncertain" before the failing extraction call.
+    assert summary(None, False, 0.7) == (1, 2, 0)
+    # With V2 the failing alternate call is made, so the case fails there.
+    assert summary(None, True, 0.0) == (0, 0, 2)
+    assert summary(None, True, 0.7) == (0, 1, 1)
+
+
+def test_page_samples_attribute_only_the_calls_a_decision_makes():
+    def call(kind, stage, batch, pages, seconds):
+        return {"kind": kind, "stage": stage, "batch": batch, "pages": pages, "duration_s": seconds}
+
+    calls = [call("token_count", "matching", None, [1, 2, 3], 0.3), call("matching", "matching", None, [1, 2, 3], 0.6),
+             call("token_count", "extraction", 0, [1], 0.1), call("token_count", "extraction", 0, [1, 2], 0.2),
+             # Rejected lookahead of page 3 while packing batch 0.
+             call("token_count", "extraction", 0, [1, 2, 3], 0.3), call("extraction", "extraction", 0, [1, 2], 1.0),
+             call("token_count", "alternate", 0, [1, 2], 0.2), call("alternate", "alternate", 0, [1, 2], 0.8),
+             call("token_count", "extraction", 1, [3], 0.1), call("extraction", "extraction", 1, [3], 0.5),
+             call("token_count", "alternate", 1, [3], 0.1), call("alternate", "alternate", 1, [3], 0.4)]
+    row = {"execution_state": "failed", "page_kinds": ["pdf", "pdf", "png"], "preparation_s": 0.3,
+           "alternate_preparation_s": 0.6, "calls": calls}
+    rows = [{**row, "case_id": "full"}, {**row, "case_id": "stopped"}, {**row, "case_id": "no-decision"}]
+    decisions = {"full": (2, True), "stopped": (1, False)}
+    without = runner.page_samples(rows, decisions, alternate=False)
+    assert without.keys() == {"pdf", "png"}
+    assert without["pdf"] == pytest.approx([1.2, 1.1]) and without["png"] == pytest.approx([1.1])
+    with_v2 = runner.page_samples(rows, decisions, alternate=True)
+    assert with_v2["pdf"] == pytest.approx([1.9, 1.8]) and with_v2["png"] == pytest.approx([1.8])
+    assert runner.page_samples(rows, {"stopped": (1, False)}, alternate=True) == {}
+
+
+def test_calibration_report_is_ineligible_when_the_code_changes_during_the_run(tmp_path, scripted, capsys,
+                                                                               monkeypatch):
+    manifest = tuning_corpus(tmp_path)
+    real, calls = config.current_code_hash, []
+
+    def drifting(directory=None):
+        calls.append(directory)
+        return real(directory) if len(calls) == 1 else "0" * 64
+
+    monkeypatch.setattr(config, "current_code_hash", drifting)
+    report_path = tmp_path / "calibration.json"
+    assert runner.main(["run", "--manifest", str(manifest), "--mode", "calibration", "--data-root",
+                        str(tmp_path / "data"), "--output", str(report_path)]) == 2
+    assert capsys.readouterr().err == "error: environment_changed_during_run\n"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["environment_changed_during_run"] and not report["quality_measurement_eligible"]
+    assert report["environment"]["code_sha256"] == real()
+    monkeypatch.setattr(config, "current_code_hash", real)
+    assert runner.main(["freeze", "--calibration", str(report_path), "--output", str(tmp_path / "frozen.json"),
+                        "--auto"]) == 2
+    assert capsys.readouterr().err == "error: calibration_report_required\n"
+
+
+def test_benchmark_records_its_run_but_is_ineligible_when_the_code_changes_during_it(tmp_path, scripted, capsys,
+                                                                                    monkeypatch):
+    registry = tuning_corpus(tmp_path)
+    frozen, digest = frozen_file(tmp_path, registry)
+    manifest = benchmark_corpus(tmp_path, digest)
+    real, calls = config.current_code_hash, []
+
+    def drifting(directory=None):
+        calls.append(directory)
+        return real(directory) if len(calls) == 1 else "0" * 64
+
+    monkeypatch.setattr(config, "current_code_hash", drifting)
+    output = tmp_path / "benchmark.json"
+    assert runner.main(benchmark_args(tmp_path, manifest, frozen, registry, output)) == 2
+    assert capsys.readouterr().err == "error: environment_changed_during_run\n"
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["environment_changed_during_run"] and not report["quality_measurement_eligible"]
+    ledger = (tmp_path / "data" / "ledger" / "benchmark-runs.jsonl").read_text().splitlines()
+    assert [json.loads(line)["event"] for line in ledger] == ["started", "completed"]
