@@ -46,6 +46,23 @@ def test_external_configuration_hides_secret_error(tmp_path):
     assert "secret" not in str(failure.value)
 
 
+def test_timer_and_capacity_configuration_is_parsed_and_validated(tmp_path):
+    path = tmp_path / "bot.env"
+    base = (f"DATA_ROOT={tmp_path}\nFROZEN_CONFIG={tmp_path}/frozen.json\nBOT_TOKEN=123456:synthetic_token\n"
+            "SHARED_PASSWORD=synthetic-password-only\nDATABASE_URL=postgresql+psycopg://synthetic\n")
+    path.write_text(base + "INACTIVITY_S=60\nALBUM_QUIET_S=0.5\nQUEUE_TIMEOUT_S=120\nDELIVERY_S=30\n"
+                    "DELIVERY_ATTEMPTS=2\nADMITTED_JOBS=3\nDOWNLOAD_LIMIT=1\nOPERATOR_TELEGRAM_IDS=11, 22\n")
+    cfg = AppConfig.load(path)
+    assert (cfg.inactivity_s, cfg.album_quiet_s, cfg.queue_timeout_s, cfg.delivery_s) == (60, 0.5, 120, 30)
+    assert (cfg.delivery_attempts, cfg.admitted_jobs, cfg.download_limit) == (2, 3, 1)
+    assert cfg.operator_ids == (11, 22) and cfg.processing_s == 1800
+    for setting, code in (("INACTIVITY_S=0", "invalid_timer_setting"), ("ALBUM_QUIET_S=nan", "invalid_timer_setting"),
+                          ("PROCESSING_S=-1", "invalid_timer_setting"), ("ADMITTED_JOBS=0", "invalid_capacity_setting")):
+        path.write_text(base + setting + "\n")
+        with pytest.raises(ConfigurationError, match=code):
+            AppConfig.load(path)
+
+
 def test_virtualized_appdata_is_rejected(tmp_path):
     path = tmp_path / "bot.env"
     path.write_text(f"DATA_ROOT={tmp_path}/AppData/Local/TgBotDocs\nFROZEN_CONFIG={tmp_path}/f.json\n")

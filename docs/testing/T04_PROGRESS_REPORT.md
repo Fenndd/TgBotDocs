@@ -1,9 +1,9 @@
 # T04 Intake Progress and Remaining Integration
 
-Date: 2026-09-28. Status: resource layer verified; collection integration remains
-in progress and is paused at the account usage checkpoint. T04 is not complete.
-Frozen recognition source, dependencies and configuration remain unchanged.
-No real Telegram request, deployment, push or sealed benchmark run was performed.
+Date: 2026-09-28. Status: resource layer and collection actor verified locally
+with controlled Telegram substitutes. Frozen recognition source, dependencies and
+configuration remain unchanged. No real Telegram request, deployment, push or
+sealed benchmark run was performed; real-Telegram checks remain for the joint E2E.
 
 ## Verified Resource Layer
 
@@ -34,39 +34,45 @@ No real Telegram request, deployment, push or sealed benchmark run was performed
   Several pages album ordering. Its native-storage classification finding was
   subsequently fixed and covered by the final 27-test author run.
 
-## Collection Actor and Open Checks
+## Collection Actor
 
-The current uncommitted `application/documents.py` implements single-file startup,
-album quiet/absolute timers, Several pages/Process, pre-delivery restart, post-
-delivery refusal, generation-tagged operations and terminal cleanup. Seven actor
-checks passed in **5.62 seconds** before the latest manual-album lifecycle patch.
-They include a controlled ProductApplication with the actual supervised parser:
-authentication before download, two owners, a mixed PNG/PDF/PNG set with all four
-pages, duplicate-update suppression, distinct messages with identical bytes,
+`application/documents.py` implements single-file startup, album quiet/absolute
+timers, Several pages/Process, pre-delivery restart, post-delivery refusal,
+generation-tagged operations and terminal cleanup. The actor checks include a
+controlled ProductApplication with the actual supervised parser: authentication
+before download, two owners, a mixed PNG/PDF/PNG set with all four pages,
+duplicate-update suppression, distinct messages with identical bytes,
 compressed-photo provenance, Logout/Cancel and zero remaining owned job directories.
 
-An independent collection review reproduced and verified fixes for two defects:
-terminal cleanup needed the generation after resource closure, and Process needed
-to refuse newly submitted separate files while prior downloads finished. Six
-focused actor checks passed independently in 4.28 seconds.
+Album rules inside Several pages are covered: a known group's late fragment
+restarts the pass before delivery while keeping the admission place and the
+charged budget, is refused without download after delivery starts, and stays
+remembered for 15 minutes after the job ends; unrelated files and new albums
+after Process are refused.
 
-The combined application/storage run produced **151 passed and one failed** in
-26.20 seconds. The failing new integration assertion expected a collection count
-after Process had already closed collection. The test now observes the count
-while collection is open; all seven actor tests then passed. The complete suite
-has not been rerun after the latest resource and manual-album fixes.
+An independent review (three Claude Code `opus-high` reviewers: specification,
+concurrency, test adequacy; each finding adversarially re-verified by a separate
+`opus-high` agent with scratch reproductions) confirmed eight findings. All were
+fixed with regressions:
 
-The latest independent finding applies album lifecycle rules inside Several
-pages: a known group's late fragment must restart before delivery, be refused
-with an incomplete-album notice after delivery, and remain remembered after the
-job ends. A patch now tracks all member group IDs and applies a quiet window to
-manual replay. **That latest patch has not been tested or independently rechecked.**
-Add the before-delivery, after-delivery and terminal-memory regressions, including
-preserved admission time/charged budget and refusal of unrelated files after
-Process. Then rerun affected and combined checks before committing the collector
-or advancing to T05.
+- A refused first album part (Busy, or while another job is active or finishing)
+  now closes its media group, so the remaining parts cannot form a partial album.
+- Buttons stay valid for the job's current generation; only a new generation or
+  a new process invalidates them.
+- An accepted page that is still downloading counts as activity for the
+  15-minute inactivity timer, and Process resets it.
+- An empty seal after failed late album parts leaves the album quiet mode, so
+  the set again waits for an explicit Process.
+- A Several pages job after Process no longer counts as waiting for the user.
+- Timer and capacity configuration parsing/validation now has a test, and the
+  expired job's own button and late album part are shown not to revive it.
 
-T05 recognition integration, T06 questions/delivery and Settings overlap, T07 local
-resilience, T08 packaging, whole-product review, joint real-Telegram E2E, the
-deferred single T01c/T07 sealed benchmark and native Linux verification remain
-pending. Recognition quality is not accepted. Resume from [STATUS](../../STATUS.md).
+Verification of the committed collector (temporary worktree at the commit
+content): `tests/application` **151 passed**; Ruff passed. The complete
+repository suite with real PostgreSQL passed **459, 1 skipped** on the combined
+working tree (this collector plus the first T05/T06 changes) before those were
+split into later commits.
+
+T05 recognition integration and T06 questions/delivery continue in their own
+commits and reports. Recognition quality is not accepted. Resume from
+[STATUS](../../STATUS.md).
