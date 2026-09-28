@@ -8,20 +8,23 @@ definition without changing anything. Only -Apply registers the task, and -Apply
 refuses to run outside an elevated (Run as administrator) session.
 
 Task definition (ADR-0005, T08):
-- action: Windows PowerShell runs deploy\windows\run-bot.ps1 -ConfigPath <file>;
+- action: Python runs the bot directly with --restart-on-failure; there is no
+  intermediate shell whose termination could leave the bot polling;
 - trigger: at system startup;
 - principal: the given account, logon type S4U (runs whether or not the account is
   signed in, stores no password, has no network credentials), limited run level;
-- settings: restart every minute on failure (999 times), no execution time limit,
+- application: retry a failed startup/run after one minute within the same Python
+  process, after resource cleanup. Clean shutdown ends the retry loop;
+- settings: scheduler restart on failure (999 times), no execution time limit,
   ignore a new instance while one runs, start when available (a missed start runs
   as soon as possible), normal process priority (the Task Scheduler default of 7 is
   below normal), and do not stop or refuse to start on battery power.
 
--RunCheck is a separate optional step: it runs "python -m tgbotdocs check --config"
+-RunCheck requires -Apply: it runs "python -m tgbotdocs check --config"
 in the current session as the current user before anything else. That check cleans
 the temporary root, applies database migrations, and starts and stops the pinned
 llama-server on the GPU; it sends nothing to Telegram. It runs as the installing
-user, not as the task account.
+user, not as the task account. Dry run never runs the application.
 
 Compatible with Windows PowerShell 5.1 and PowerShell 7.
 
@@ -90,11 +93,11 @@ function Test-Elevated {
 }
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-$runner = Join-Path $PSScriptRoot 'run-bot.ps1'
 $python = Join-Path $repoRoot '.venv\Scripts\python.exe'
-$powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 
 # ---- Validation (read-only) ----
+if ($RunCheck -and -not $Apply) { throw '-RunCheck requires -Apply; a dry run cannot change local data.' }
+if ($Apply -and -not (Test-Elevated)) { throw '-Apply requires an elevated PowerShell session (Run as administrator); nothing was changed.' }
 if (-not (Test-FullyQualified $ConfigPath)) { throw 'ConfigPath must be an absolute path.' }
 $config = [IO.Path]::GetFullPath($ConfigPath)
 if (Test-Inside $config $repoRoot) { throw 'ConfigPath must be outside the checkout.' }
@@ -104,8 +107,6 @@ if ($config.Contains('"')) { throw 'ConfigPath must not contain double quotes.' 
 if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
     throw 'The virtual environment is missing: run "uv sync --locked --no-dev" in the checkout first.'
 }
-if (-not (Test-Path -LiteralPath $runner -PathType Leaf)) { throw 'run-bot.ps1 is missing next to this script.' }
-if (-not (Test-Path -LiteralPath $powershell -PathType Leaf)) { throw 'Windows PowerShell was not found.' }
 if (-not $TaskPath.StartsWith('\') -or -not $TaskPath.EndsWith('\')) { throw 'TaskPath must start and end with a backslash.' }
 try {
     $sid = (New-Object Security.Principal.NTAccount($UserId)).Translate([Security.Principal.SecurityIdentifier]).Value
@@ -113,11 +114,11 @@ try {
     throw 'UserId does not resolve to a Windows account on this machine.'
 }
 
-$argument = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $runner + '" -ConfigPath "' + $config + '"'
+$argument = '-m tgbotdocs run --config "' + $config + '" --restart-on-failure'
 $description = 'Runs the TgBotDocs Telegram bot (python -m tgbotdocs run) at startup; restarts on failure.'
 
 # In-memory CIM objects only; nothing is registered until Register-ScheduledTask.
-$action = New-ScheduledTaskAction -Execute $powershell -Argument $argument -WorkingDirectory $repoRoot
+$action = New-ScheduledTaskAction -Execute $python -Argument $argument -WorkingDirectory $repoRoot
 $trigger = New-ScheduledTaskTrigger -AtStartup
 $principal = New-ScheduledTaskPrincipal -UserId $UserId -LogonType S4U -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) `
@@ -125,6 +126,7 @@ $settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New
     -Priority 5 -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
 $existing = Get-ScheduledTask -TaskName $TaskName -TaskPath $TaskPath -ErrorAction SilentlyContinue
+if ($Apply -and $existing -and -not $Replace) { throw 'The task is already registered; pass -Replace to overwrite it, or uninstall it first.' }
 
 Write-Output ('Mode:            ' + $(if ($Apply) { 'APPLY' } else { 'DRY RUN (no changes; add -Apply to register)' }))
 Write-Output ('Checkout:        ' + $repoRoot)
@@ -134,7 +136,7 @@ Write-Output ('Account:         ' + $UserId + ' (SID ' + $sid + ')')
 Write-Output ('Task:            ' + $TaskPath + $TaskName + $(if ($existing) { ' (already registered)' } else { ' (not registered)' }))
 Write-Output ''
 Write-Output 'Planned definition:'
-Write-Output ('$action = New-ScheduledTaskAction -Execute ''' + $powershell + ''' `')
+Write-Output ('$action = New-ScheduledTaskAction -Execute ''' + $python + ''' `')
 Write-Output ('    -Argument ''' + $argument.Replace("'", "''") + ''' `')
 Write-Output ('    -WorkingDirectory ''' + $repoRoot + '''')
 Write-Output '$trigger = New-ScheduledTaskTrigger -AtStartup'
@@ -169,9 +171,6 @@ if (-not $Apply) {
     Write-Output 'Dry run complete; nothing was registered.'
     exit 0
 }
-
-if (-not (Test-Elevated)) { throw '-Apply requires an elevated PowerShell session (Run as administrator); nothing was registered.' }
-if ($existing -and -not $Replace) { throw 'The task is already registered; pass -Replace to overwrite it, or uninstall it first.' }
 
 $registered = Register-ScheduledTask -TaskName $TaskName -TaskPath $TaskPath -Action $action -Trigger $trigger `
     -Principal $principal -Settings $settings -Description $description -Force:$Replace

@@ -20,14 +20,14 @@ Status: prepared on 2026-09-28. **The Windows delivery is not verified end to en
 ADR-0005 leaves the choice to T08: a service or a scheduled task that starts at boot and restarts on failure. **Selected: a Task Scheduler task.**
 
 - It is part of Windows. No third-party binary is added to the delivery, so there is nothing more to pin, verify, or license. NSSM and WinSW are third-party service wrappers; a pywin32 service would add a dependency and service code to the product.
-- It provides the required behavior as settings: an at-startup trigger, restart on failure, no execution time limit, and at most one instance. The application also holds its own kernel instance lock (`application_already_running`).
+- It launches Python directly at startup with `--restart-on-failure`, no execution time limit, and at most one instance. The application retries failed startup or polling after 60 seconds, once the failed attempt has released its resources; a normal stop ends supervision. The application also holds its own kernel instance lock (`application_already_running`).
 - With the S4U logon type, the task runs whether or not the account is signed in, and **no password is stored**. S4U has no network credentials. The bot does not need them: its outbound HTTPS to Telegram and its loopback connections to PostgreSQL and llama-server work without them.
-- The bot already supervises its own children (a llama-server in a kill-on-close Job Object). The wrapper only needs to start the Python process and start it again after it exits.
+- The bot already supervises its own children (a llama-server in a kill-on-close Job Object). The scheduled task owns that Python process directly; there is no intermediate PowerShell child. Scheduler restart settings are an additional fallback for action failures, while application errors are handled by the explicit retry loop.
 
 Known limits, which must be checked on the target (see "Not verified"):
 
-- Task Scheduler's "restart on failure" is documented for failed task runs. This checkout has not verified whether a non-zero exit of the action counts as a failure. `run-bot.ps1` passes Python's exit code through (verified).
-- `Stop-ScheduledTask` terminates the task's process without the bot's graceful shutdown. The next start cleans the temporary root. The llama-server child is in a kill-on-close Job Object; whether the Python child of `powershell.exe` also ends is not verified. Check for leftovers with the command under "Operate".
+- Boot, Scheduler action-failure recovery and session-0 CUDA remain unverified. Application retry and cancellation were checked with controlled dependency failures; this does not substitute for an elevated boot test.
+- `Stop-ScheduledTask` terminates the task's process without the bot's graceful shutdown. The next start cleans the temporary root. The task action is the bot Python process; llama-server and parser children belong to its kill-on-close Job Object. Actual Task Scheduler stop is still unverified on this PC. Check for leftovers with the command under "Operate".
 - The task runs in the non-interactive session 0. CUDA from that session must be verified on the target.
 
 ## Layout (example)
@@ -47,7 +47,7 @@ By default uv installs Python under the installing user's profile. Set `UV_PYTHO
 
 ## Clean-Machine Procedure
 
-Run the steps in a PowerShell window in the checkout. Step 1 and the `-Apply` steps need an elevated window ("Run as administrator"). Every script except `run-bot.ps1` is a **dry run** unless `-Apply` is given. Run it once without `-Apply`, read the planned commands, and then repeat it with `-Apply`.
+Run the steps in a PowerShell window in the checkout. Step 1 and the `-Apply` steps need an elevated window ("Run as administrator"). Registration, removal and directory-permission scripts are **dry runs** unless `-Apply` is given; `verify-artifacts.ps1` is read-only and `run-bot.ps1` starts the foreground bot. Run it once without `-Apply`, read the planned commands, and then repeat it with `-Apply`.
 
 ### 1. NVIDIA driver
 
@@ -150,8 +150,17 @@ Timers must be positive numbers, and capacities must be positive integers.
 Run the task as a dedicated standard (non-administrator) local account, for example `MACHINE\tgbotdocs`. That account needs:
 
 - read access to the checkout, `C:\TgBotDocs\uv-python`, and the configuration file;
-- modify access to `DATA_ROOT`, for example `icacls C:\TgBotDocsData\prod /grant "MACHINE\tgbotdocs:(OI)(CI)M"`;
+- modify access to the dedicated application `DATA_ROOT`; do not grant the bot access to PostgreSQL administrative credentials or its cluster;
 - the "Log on as a batch job" right, which S4U tasks require. If registering or starting the task fails with a logon error, the machine owner must grant this right. That is a system policy change.
+
+After installing the files and creating the external configuration, close the bot and harden the four **dedicated, disjoint** delivery directories. Existing broad inherited/explicit access is replaced; SYSTEM and Administrators retain full control. App/Python become read-only for the bot, config readable only, and application data writable. Updating protected app files later requires elevation. Do not pass a profile/drive root, the shared development checkout, or the PostgreSQL parent directory. The script rejects overlapping roots and reparse points before changing anything.
+
+```powershell
+.\deploy\windows\secure-directories.ps1 -AppRoot C:\TgBotDocs\app -PythonRoot C:\TgBotDocs\uv-python -ConfigDirectory C:\TgBotDocs\config -DataRoot C:\TgBotDocsData\prod -BotAccount "$env:COMPUTERNAME\tgbotdocs"
+# Read the plan, then repeat with -Apply in an elevated session.
+```
+
+Check effective access as the dedicated account before registering the task; scripts do not grant the batch-logon right. Elevated ACL application and a dedicated-account launch are pending target-machine checks.
 
 ### 8. Check without Telegram
 
@@ -159,7 +168,7 @@ Run the task as a dedicated standard (non-administrator) local account, for exam
 .venv\Scripts\python.exe -m tgbotdocs check --config C:\TgBotDocs\config\tgbotdocs.env
 ```
 
-The same check is available as `install-bot-task.ps1 -RunCheck`. It cleans the temporary root, applies migrations, checks database health, verifies the frozen identity and the artifact hashes, and starts and stops llama-server on the GPU. It prints `local_startup_verified` and sends nothing to Telegram. It runs as the current user, so run it before you grant the permissions in step 7, or grant them again afterwards. Folders it creates belong to the user who ran it.
+The same check is available as `install-bot-task.ps1 -Apply -RunCheck`; `-RunCheck` is refused in a dry run. It cleans the temporary root, applies migrations, checks database health, verifies the frozen identity and the artifact hashes, and starts and stops llama-server on the GPU. It prints `local_startup_verified` and sends nothing to Telegram. It runs as the current user, so run it before you grant the permissions in step 7, or grant them again afterwards. Folders it creates belong to the user who ran it.
 
 ### 9. Register the bot task
 
@@ -171,7 +180,7 @@ Start-ScheduledTask -TaskPath '\TgBotDocs\' -TaskName 'TgBotDocs Bot'
 
 The dry run prints the exact `Register-ScheduledTask` definition:
 
-- the action is `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <checkout>\deploy\windows\run-bot.ps1 -ConfigPath <file>`; the execution policy applies to that process only;
+- the action is `<checkout>\.venv\Scripts\python.exe -m tgbotdocs run --config <file> --restart-on-failure`, with the checkout as working directory;
 - the trigger is at startup;
 - the principal is the given account with S4U logon and the limited run level;
 - the settings are restart every 1 minute up to 999 times, no execution time limit, ignore a new instance, start when available, normal priority 5 (the default of 7 is below normal), and run on battery.
@@ -199,7 +208,6 @@ Stop-Service TgBotDocsPostgreSQL   # fast shutdown; stop the bot first
 Logs (technical events only; no document content, tokens or passwords):
 
 - `<DATA_ROOT>\logs\tgbotdocs.log`: the application log, rotated at midnight UTC and kept for 7 days.
-- `<DATA_ROOT>\logs\run-bot.log`: the wrapper's start and exit lines, plus the application's console output (content-free failure codes such as `local_application_failed: configuration_invalid_or_missing`). About 5 MB are kept, with one previous file.
 - PostgreSQL running as a service is expected to write to the Windows Application event log. This is not verified.
 - Task Scheduler history appears in Task Scheduler's own history view if the machine owner has enabled it.
 
@@ -208,7 +216,7 @@ Operator alerts go to `OPERATOR_TELEGRAM_IDS` (startup completed or failed, inta
 ## Upgrade
 
 1. Stop the task, then check that no process is left (see "Operate").
-2. Back up the database according to the T08 backup procedure (profiles only). This procedure is not part of this document.
+2. Back up the permitted PostgreSQL profile data with [BACKUP_RESTORE](BACKUP_RESTORE.md).
 3. Check out the new delivered commit, then run `uv sync --locked --no-dev`, with the same `UV_*` variables as in step 2.
 4. If the release changes the llama.cpp build, the model, or the frozen configuration: install the new artifacts and the new frozen file, and update `FROZEN_CONFIG`.
 5. Run `verify-artifacts.ps1`, then `python -m tgbotdocs check --config ...`. Migrations are applied automatically.
@@ -227,9 +235,9 @@ Neither script deletes data. The PostgreSQL cluster holds the user profiles, and
 
 ## Verification Record
 
-Verified on the development PC (Windows 11 Home, Windows PowerShell 5.1) on 2026-09-28:
+Earlier preparation checks on the development PC (Windows 11 Home, Windows PowerShell 5.1) on 2026-09-28; current remediation checks are recorded separately in the T08 report:
 
-- All five scripts in `deploy/windows` parse with `[System.Management.Automation.Language.Parser]::ParseFile` with zero errors.
+- The original five scripts in `deploy/windows` parsed with `[System.Management.Automation.Language.Parser]::ParseFile` with zero errors.
 - `verify-artifacts.ps1 -DataRoot C:\Users\nikit\TgBotDocsData\dev`: all three runtime artifacts and `frozen-t01b.json` matched, and the frozen file names the pinned build and hashes; exit code 0. With a wrong expected frozen hash, the exit code was 1. With a missing data root, it reported four `MISSING` entries and exit code 1. With a relative path, the exit code was 2.
 - `install-bot-task.ps1` dry run: printed the definition, and the resolved settings were `RestartCount=999 RestartInterval=PT1M ExecutionTimeLimit=PT0S MultipleInstances=IgnoreNew StartWhenAvailable=True Priority=5 LogonType=S4U RunLevel=Limited`; exit code 0; no task was registered. It rejects a relative path, a configuration inside the checkout, a missing `.venv`, and an unknown account. `-Apply` in a non-elevated session refused and registered nothing.
 - `uninstall-bot-task.ps1` dry run: reported that the task is not registered; exit code 0.
@@ -240,7 +248,7 @@ Verified on the development PC (Windows 11 Home, Windows PowerShell 5.1) on 2026
 Not verified (not executed, or impossible on this PC):
 
 - Registering the scheduled task, registering the PostgreSQL service, start at boot, and restart after failure. These were deliberately not executed on the developer's machine.
-- Whether Task Scheduler restarts the task after `run-bot.ps1` exits with a non-zero code, and whether `Stop-ScheduledTask` ends the Python child of `powershell.exe`.
+- Task Scheduler action-failure restart and stopping the directly owned Python action; there is no PowerShell child in the new definition.
 - CUDA and llama-server in the task's non-interactive session 0 with S4U logon, and GPU access by the dedicated account.
 - A PostgreSQL service running as NETWORK SERVICE on this cluster, and where its logs go.
 - `uv python install 3.14.5` (uv-managed CPython, as opposed to the python.org build used here), the uv installer, a clean machine, and a second independent run of this procedure (T08 acceptance).

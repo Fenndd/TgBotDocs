@@ -52,6 +52,13 @@ if (-not $Apply) {
 if (-not (Test-Elevated)) { throw '-Apply requires an elevated PowerShell session (Run as administrator); nothing was changed.' }
 if ($existing.State -eq 'Running') {
     Stop-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    do {
+        $state = (Get-ScheduledTask -TaskName $TaskName -TaskPath $TaskPath).State
+        if ($state -ne 'Running') { break }
+        Start-Sleep -Milliseconds 200
+    } while ([DateTime]::UtcNow -lt $deadline)
+    if ($state -eq 'Running') { throw 'Task did not stop; it was not unregistered. Inspect Task Scheduler.' }
 }
 Unregister-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -Confirm:$false
 Write-Output ('Unregistered ' + $TaskPath + $TaskName + '.')
