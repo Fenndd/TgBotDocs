@@ -1,92 +1,159 @@
 # Backup and Restore of Persistent Data
 
-Status: Windows procedure verified on 2026-09-28 against the development cluster from [POSTGRESQL_DEVELOPMENT](POSTGRESQL_DEVELOPMENT.md). The Linux Docker Compose commands are **not verified**: the Compose file does not exist yet, and Docker was not available on the development PC. Implements T08 delivery item 7 ([T08](../../specs/T08-delivery.md)); the data boundary comes from [DATA_MODEL](../architecture/DATA_MODEL.md) and [SECURITY](../security/SECURITY.md).
+Status: the revised Windows procedure was verified on 2026-09-28 against disposable databases on the local PostgreSQL 18.6 cluster, using PowerShell 7.6.5 and Windows PowerShell 5.1.26100.9444. The checks covered backup, verification, fresh-target restore, unexpected tables/archives and cleanup failures. A clean installation, the delivered Windows service and every Linux command below remain **unverified**. No existing application rows were changed by these checks.
 
-## What Is Included and Excluded
+This implements T08 delivery item 7 ([T08](../../specs/T08-delivery.md)); the persistence boundary comes from [DATA_MODEL](../architecture/DATA_MODEL.md) and [SECURITY](../security/SECURITY.md). Installation-specific configuration is described in [CONFIGURATION](CONFIGURATION.md), [INSTALL_WINDOWS](INSTALL_WINDOWS.md) and [INSTALL_LINUX](INSTALL_LINUX.md).
 
-A backup contains exactly the three tables that PostgreSQL is permitted to hold:
+## Included Data and Guard Conditions
+
+A backup contains exactly these tables:
 
 | Table | Contents |
 | --- | --- |
-| `public.users` | Telegram user IDs of profile owners and creation times |
-| `public.extraction_profiles` | Current personal profiles (no previous versions exist) |
+| `public.users` | Telegram IDs of profile owners and creation times |
+| `public.extraction_profiles` | Current personal profiles; no previous revisions |
 | `public.alembic_version` | Schema migration version |
 
-The table structure, keys, the owner index, and the `users.telegram_id` sequence come with them. Roles, passwords and grants are not included (`--no-owner --no-privileges`).
+The table structure, keys, owner index and `users.telegram_id` sequence are included. Roles, passwords and grants are excluded by `--no-owner --no-privileges`. Configuration, originals, prepared pages, OCR, extracted values, results, evidence, temporary jobs, logs, model weights and runtime binaries are excluded.
 
-Never included: temporary job directories, originals, prepared pages, OCR, extracted values, results, evidence, logs, the external `.env`, the credential file, model weights, and the llama.cpp runtime. These either never enter PostgreSQL or are not backup material. A database backup is not a document archive.
+The Windows script checks **all ordinary and partitioned tables outside PostgreSQL's system schemas**, including tables outside `public`. It refuses any source table set other than the three above. It then checks the custom archive listing against the permitted tables, their keys/defaults, the known owner index and the known identity sequence. An unexpected table, schema or archive object type is refused. A future migration that changes these objects requires review of DATA_MODEL and the script's allowlist.
 
-Backup refuses to run when the application's `public` schema holds any table other than the three above, and checks the archive listing after the dump; a dump with any other table, schema, or object type is deleted and reported as a failure. A future migration that adds a table must first be reviewed against DATA_MODEL, then added to the list in the script.
+Restore only accepts trusted archives produced by the reviewed backup process. A permitted table listing does not audit arbitrary SQL embedded inside an attacker-created archive. The SHA-256 identifies the saved file; retain it through an independently trusted channel if using it to check provenance.
 
-## What a Restore Does Not Revive
+## Windows Prerequisites and Connection Files
 
-Jobs, queues, uploaded files, dialogue state, unconfirmed drafts and authenticated sessions live only in memory or in the temporary directory and are never in the database. After a restore, users must log in again with the shared password and resubmit documents, exactly as after a restart. The restore also returns profiles to the state at backup time: later changes and deletions are lost, and deleted profiles reappear.
+Run the script from the installed source/package checkout. Supply both `-DataRoot` and `-PgBin`; there are no personal-machine defaults. `DataRoot` must be an existing absolute directory outside the checkout and AppData. `PgBin` is the absolute directory containing the installed `psql.exe`, `pg_dump.exe`, `pg_restore.exe`, `createdb.exe` and `dropdb.exe`. Match the tools to the supported PostgreSQL installation. Dump and connection-file paths must also be absolute and outside the checkout and AppData.
 
-## Windows Commands
+Supply exactly one connection source:
 
-Run from the repository root in PowerShell (Windows PowerShell 5.1 or later). The script reuses the PostgreSQL 18.6 binaries under `C:\Users\nikit\TgBotDocsData\postgresql-18.6` and reads `C:\Users\nikit\TgBotDocsData\postgresql-dev-credentials.json` by default; `-DataRoot` and `-CredentialFile` select other locations. Credentials are passed to the tools only through the `PGPASSWORD` variable of the script process and are never printed.
+- `-ConfigPath`: an external application `.env` containing `DATABASE_URL`. The script uses the installed application's Python, python-dotenv with interpolation disabled and SQLAlchemy's URL parser. Supply `-PythonExe` when its path differs from `<package>\.venv\Scripts\python.exe`. The parser supports `postgresql` and `postgresql+psycopg` URLs and an optional `sslmode` query parameter; other URL query parameters are refused rather than silently ignored.
+- `-CredentialFile`: an external private JSON file with `host`, `port`, `database`, `username` and `password`, plus optional `sslmode` (default `prefer`). Existing explicitly selected development JSON files with `admin_username` and `admin_password` remain supported.
+
+Backup uses the application connection. Verify and Restore additionally need a role that can create a database owned by the application role and subsequently drop that database. Supply `-AdminCredentialFile` using the same JSON shape, host, port and SSL mode; its `database` may be `postgres`. Without it, the legacy admin keys are used when present, otherwise the application role is used and must already have the necessary privileges. The script grants no privileges and changes no existing role.
+
+Protect the connection files before use; the script does not modify their ACLs. Passwords and the full connection URL are not printed or supplied as command arguments. Native PostgreSQL diagnostics are suppressed because they can contain SQL or data. Connection passwords pass through the child tools' `PGPASSWORD` environment, and the script restores the affected process environment in `finally`.
+
+For a locally reviewed script, an operator may open a session with a process-only execution policy; this does not change the machine policy:
 
 ```powershell
-# Back up into a new file. The path must be absolute, outside the repository and outside AppData.
-./scripts/backup-postgres.ps1 -Action Backup -DumpPath D:\TgBotDocsBackup\profiles-2026-09-28.dump
-
-# Check the dump: restore it into a random scratch database, compare, then drop the scratch database.
-./scripts/backup-postgres.ps1 -Action Verify -DumpPath D:\TgBotDocsBackup\profiles-2026-09-28.dump
-
-# Restore into an explicit existing database owned by the application role.
-./scripts/backup-postgres.ps1 -Action Restore -DumpPath D:\TgBotDocsBackup\profiles-2026-09-28.dump -TargetDatabase tgbotdocs_restored
+powershell.exe -NoProfile -ExecutionPolicy Bypass
+# Alternatively: pwsh.exe -NoProfile -ExecutionPolicy Bypass
 ```
 
-- **Backup** writes a PostgreSQL custom-format archive with `pg_dump` as the application role. It refuses an existing file instead of replacing it. The file is created first and restricted to the current Windows account (inheritance removed) before any data is written. The script prints the file size and SHA-256; record the hash with the backup.
-- **Verify** needs the admin role from the credential file, because the application role has no `CREATEDB` privilege. The admin role creates `tgbotdocs_verify_<random>` owned by the application role; the application role restores into it exactly as Restore does. The check compares the full table set of the scratch database with the permitted set and, for each permitted table, row count and an MD5 checksum of all rows in key order against the **current** source database. Run it right after Backup; a source change in between is reported as a difference. The scratch database is dropped even when the check fails.
-- **Restore** runs `pg_restore --single-transaction --exit-on-error --clean --if-exists --no-owner --no-privileges` as the application role: any error rolls the whole restore back. `--clean` replaces only the three permitted tables in the target. The target must exist and be owned by the application role; create one as the admin role, for example `createdb.exe -h 127.0.0.1 -p 55432 -U tgbotdocs_dev_admin -O tgbotdocs_dev tgbotdocs_restored` (the tool prompts for the admin password). The live application database is refused unless `-Force` is added. Before restoring into the live database, stop the bot; after restoring, start it normally so startup cleanup and migrations run.
+In that session, from the package/checkout root, set the actual external paths. The paths below are examples and must already exist:
 
-## Linux Docker Compose Equivalent (not verified)
+```powershell
+$common = @{
+    DataRoot = 'D:\TgBotDocsData'
+    PgBin = 'C:\PostgreSQL\18.6\bin'
+    ConfigPath = 'D:\TgBotDocsConfig\tgbotdocs.env'
+    PythonExe = 'C:\TgBotDocs\.venv\Scripts\python.exe'
+    AdminCredentialFile = 'D:\TgBotDocsConfig\postgres-admin.json'
+}
+$dump = 'D:\TgBotDocsBackup\profiles-2026-09-28.dump'
 
-ADR-0005 names the PostgreSQL service `db`. Replace `<db_user>` and `<db_name>` with the values of the delivered Compose configuration. Writing the archive inside the container and copying it avoids streaming a custom-format archive through a non-seekable pipe, which `pg_restore` cannot always reorder.
+& .\scripts\backup-postgres.ps1 @common -Action Backup -DumpPath $dump
+& .\scripts\backup-postgres.ps1 @common -Action Verify -DumpPath $dump
+& .\scripts\backup-postgres.ps1 @common -Action Restore -DumpPath $dump `
+    -TargetDatabase tgbotdocs_restored_20260928
+```
+
+For JSON-only operation, replace `ConfigPath` and `PythonExe` with `CredentialFile`; do not supply both connection sources. The hashtable is splatted into the script in the current session, not into a second native `powershell.exe` process.
+
+## Backup, Verify and Fresh-Target Restore
+
+**Backup** writes a custom-format archive as the application role. It refuses an existing path, atomically creates a new file and removes inherited permissions/grants the current Windows account full control before writing data. A failed dump/listing check removes only that newly created archive. The script prints its path, size and SHA-256. It does not delete older backups.
+
+**Verify** creates a random `tgbotdocs_verify_<random>` database owned by the application role and restores into it in one transaction. It compares the complete restored table set and each permitted table's row count and MD5 of all rows in primary-key order with the **current source**. UTC/ISO session formatting is fixed for the comparison. Verify immediately after Backup with writes paused for a stable comparison: changes after the dump legitimately cause a difference. This comparison is a data consistency check, not archive authentication.
+
+Verify drops only the scratch database created by that invocation. A restore/comparison error remains the primary error if cleanup also fails; the warning identifies the owned scratch name for manual cleanup. If comparison succeeds but cleanup fails, Verify returns a failure rather than reporting complete success. Record the exact leftover name and have the authorized database administrator remove that owned database; do not drop other databases.
+
+**Restore** creates a fresh database named by `-TargetDatabase`, using `template0` and UTF-8 and making the application role its owner. The source/live name and every existing database are refused. There is no `-Force` or in-place replacement path. `pg_restore --single-transaction --exit-on-error --no-owner --no-privileges` commits all permitted objects together; it does not use `--clean`. If restore fails, the script attempts to drop only the target it just created and preserves the original error if cleanup also fails. A successful Restore leaves the new database available for inspection.
+
+Inspect the new database before changing application configuration. Switching the external `DATABASE_URL` to it, stopping/starting the bot and retiring the old database are separate deliberate operator actions; follow [OPERATIONS](OPERATIONS.md). Keep the previous database until the replacement is accepted. Restored profiles reflect the backup time: subsequent edits disappear and subsequently deleted profiles can reappear. Jobs, queues, uploads, drafts and authenticated sessions do not resume; users must sign in and resubmit documents after restart.
+
+## Linux Docker Compose Procedure — Not Executed
+
+The delivered Compose files now exist, but native Linux backup/restore has not been run. Follow [INSTALL_LINUX](INSTALL_LINUX.md) for the reviewed image references, exported paths and Compose wrapper. The examples use the container's local PostgreSQL socket, the `tgbotdocs` application role and the `tgbotdocs_admin` bootstrap admin from that recipe. Do not substitute an unreviewed image to make backup commands start. The Windows script's source/archive guard is not automatically supplied by these manual commands.
+
+First check the complete non-system table set and require exactly the three approved names. This prints table names only:
+
+```sh
+dc() { sh "$TGBOTDOCS_CHECKOUT/deploy/linux/compose.sh" "$@"; }
+dc exec -T db psql -X -A -t -v ON_ERROR_STOP=1 -U tgbotdocs -d tgbotdocs <<'SQL'
+select n.nspname || '.' || c.relname
+from pg_class c join pg_namespace n on n.oid = c.relnamespace
+where c.relkind in ('r', 'p')
+  and n.nspname not in ('pg_catalog', 'information_schema')
+  and n.nspname not like 'pg_toast%'
+order by 1;
+SQL
+```
+
+The host directory must be owned by the operator and mode `0700` **before** copying a dump into it. A host `umask` does not propagate into a container command: set `077` inside the container as well. `exec -T` disables pseudo-terminal transformation. Create a private random container directory and a new host archive path:
 
 ```sh
 umask 077
-docker compose exec db pg_dump -U <db_user> -d <db_name> --format=custom --no-owner --no-privileges \
-  --table=public.users --table=public.extraction_profiles --table=public.alembic_version -f /tmp/profiles.dump
-# Check that only the three tables (and their keys, index and sequence) are listed.
-docker compose exec db pg_restore --list /tmp/profiles.dump
-docker compose cp db:/tmp/profiles.dump /srv/tgbotdocs-backup/profiles-2026-09-28.dump
-docker compose exec db rm /tmp/profiles.dump
-chmod 600 /srv/tgbotdocs-backup/profiles-2026-09-28.dump
-
-# Restore: stop the bot first, copy the dump in, restore in one transaction, remove the copy.
-docker compose stop app
-docker compose cp /srv/tgbotdocs-backup/profiles-2026-09-28.dump db:/tmp/profiles.dump
-docker compose exec db pg_restore -U <db_user> -d <db_name> --single-transaction --exit-on-error \
-  --clean --if-exists --no-owner --no-privileges /tmp/profiles.dump
-docker compose exec db rm /tmp/profiles.dump
-docker compose start app
+# If this is a new operator-owned directory; review an existing directory's owner/mode first.
+install -d -m 0700 /srv/tgbotdocs-backup
+backup=/srv/tgbotdocs-backup/profiles-2026-09-28.dump
+test ! -e "$backup" || exit 1
+container_dir=$(dc exec -T db sh -eu -c '
+  umask 077
+  directory=$(mktemp -d /tmp/tgbotdocs-backup.XXXXXX)
+  pg_dump --no-password -U tgbotdocs -d tgbotdocs --format=custom --no-owner --no-privileges \
+    --table=public.users --table=public.extraction_profiles --table=public.alembic_version \
+    -f "$directory/profiles.dump"
+  printf "%s\n" "$directory"
+')
+# Inspect metadata and refuse unapproved tables, schemas or object types before copying/restoring.
+dc exec -T db pg_restore --list "$container_dir/profiles.dump"
+dc cp "db:$container_dir/profiles.dump" "$backup"
+chmod 0600 "$backup"
+sha256sum "$backup"
+dc exec -T db rm -- "$container_dir/profiles.dump"
+dc exec -T db rmdir -- "$container_dir"
 ```
 
-These commands have not been executed. A separate Verify equivalent for Linux is not provided; until one is checked on the Linux host, restore into a separate database and compare the table set and row counts manually.
+These manual steps do not supply automatic failure cleanup. Record the exact random directory immediately and remove only that attempt's file/directory if a later command fails. A failure before the shell returns the directory can leave a private `/tmp/tgbotdocs-backup.*` directory; identify its ownership and contents privately before cleanup. Do not use a broad recursive delete or paste profile data into reports.
 
-## Protecting Dumps and Secrets
+For verification or recovery, use a new, explicit disposable database. Copy the trusted dump into a private container directory and inspect its listing before creating the database. Each line below depends on the preceding line succeeding; stop on any error:
 
-- A dump contains the text users typed into their profiles, which may be sensitive. Treat it like the database: keep it outside Git, outside the repository, outside AppData and outside any folder synchronized to a cloud service unless the owner has decided otherwise.
-- The script restricts each new dump to the current Windows account. Copying or moving a file can apply the destination's inherited permissions; check the permissions of copies.
-- The credential file, the external `.env`, the Telegram token and the shared password are never part of a dump. Back them up, if at all, separately and in a secret store chosen by the environment owner (see [OPERATIONS](OPERATIONS.md)).
-- Do not paste dump contents, `pg_restore` output containing row data, or credentials into reports or issue trackers.
+```sh
+restore_dir=$(dc exec -T db sh -eu -c 'umask 077; mktemp -d /tmp/tgbotdocs-restore.XXXXXX')
+dc cp "$backup" "db:$restore_dir/profiles.dump"
+dc exec -T db chmod 0600 "$restore_dir/profiles.dump"
+dc exec -T db pg_restore --list "$restore_dir/profiles.dump"
+# This name must be new. createdb refuses an existing database.
+target=tgbotdocs_restore_check_20260928
+dc exec -T db createdb --no-password -U tgbotdocs_admin -O tgbotdocs -T template0 -E UTF8 "$target"
+dc exec -T db pg_restore --no-password -U tgbotdocs -d "$target" \
+  --single-transaction --exit-on-error --no-owner --no-privileges "$restore_dir/profiles.dump"
+```
 
-## Retention
+Compare the complete non-system table set and, for each approved table, row count and checksum of all rows ordered by `telegram_id`, `id` or `version_num`, respectively, against the stable source. Use identical UTC/ISO formatting. This manual Linux comparison has not been validated as equivalent to Windows Verify; retain that gap in the operational record.
 
-The script does not schedule backups, rotate files, or delete old dumps. How often to back up, how many dumps to keep, where to keep them, and when to destroy them are the responsibility of the environment owner. Deleting a file does not guarantee physical erasure from an SSD or from backup media.
+After a verification attempt, drop only the database whose successful creation was recorded for that attempt, using `dc exec -T db dropdb --no-password -U tgbotdocs_admin "$target"`. Never run that cleanup after a failed `createdb`, which could mean the name already belonged to someone else. Remove only the copied file and its recorded directory with `rm` and `rmdir`. For a successful recovery, keep the newly restored database for inspection instead of dropping it; an application configuration switch requires a separate operator decision. No live `--clean` restore is part of this procedure.
 
-## Verification Record (2026-09-28, Windows)
+## Protection and Retention
 
-Run on the development cluster at 127.0.0.1:55432 with PostgreSQL 18.6, without stopping or starting it:
+A dump contains profile instructions and owner identifiers. Keep it outside Git, the checkout, AppData and cloud-synchronized folders unless the environment owner has expressly selected that storage. Check copied files' permissions because destination inheritance can change access. Keep `.env`, PostgreSQL credential files, the Telegram token and shared password separate in the owner's chosen secret store. Never paste dump contents, secret files or data-bearing restore diagnostics into reports.
 
-- The credential file contains `host`, `port`, `database`, `username`, `password`, `admin_username` and `admin_password`. The application role `tgbotdocs_dev` is not a superuser and has no `CREATEDB`; `tgbotdocs_dev_admin` has both. Verify therefore uses the admin role only to create and drop the scratch database.
-- Two synthetic profiles for a random synthetic owner ID (at least 10^15) were saved through `tgbotdocs.storage.ProfileStore`.
-- Backup produced a 6,282-byte archive; the file ACL listed only the current account with full control. A second Backup to the same path was refused. Relative, in-repository and AppData paths were refused.
-- The first run rejected the archive because the listing check did not yet allow the `users.telegram_id` sequence entries; the dump was deleted automatically. After the check accepted sequences that belong to the permitted tables, `pg_restore --list` showed only `alembic_version`, `extraction_profiles` and `users` (tables, data, keys, owner index and that sequence).
-- Verify created a random scratch database, matched the table set and the row counts/checksums of all three tables, and dropped the scratch database.
-- Restore refused the live database without `-Force` and a missing `-TargetDatabase`; a restore into a nonexistent database failed without changes. Two consecutive restores into a throwaway database created by the admin role succeeded and left the expected row counts; the database was then dropped.
-- The synthetic profiles and the synthetic user row were deleted, the dump files were deleted, and the cluster's database list was back to `postgres`, `template0`, `template1` and `tgbotdocs_dev`.
+Backup scheduling, frequency, retention and eventual destruction are operator decisions. This script does not schedule, rotate or delete old dumps. File deletion does not guarantee physical erasure from SSDs or backup media.
 
-Not verified: Restore with `-Force` into the live application database, the Backup refusal for an unexpected table in the application schema, and every Linux command above.
+## Verification Record — 2026-09-28
+
+The revised script was exercised on the already-running local PostgreSQL **18.6** cluster with its 18.6 tools, using **PowerShell 7.6.5** and **Windows PowerShell 5.1.26100.9444**. All fixtures and temporary files were under the approved external data root. Tests created random owned source/target databases, migrated the source through the application store and saved two synthetic profiles for a recorded synthetic owner. They did not test against or delete preexisting application rows.
+
+Verified:
+
+- Both hosts: external `DATABASE_URL` configuration parsing, Backup, Verify, repeat-path refusal and source/live-name refusal.
+- Fresh-target Restore: expected rows were restored; a second attempt targeting the existing restored database failed and preserved its row counts.
+- Explicit legacy development JSON compatibility for Verify.
+- An extra source table in `public` and an extra table in another schema each caused Backup refusal without an archive. A real custom archive containing an extra table was refused by Verify and Restore. A malformed archive was refused.
+- Fault-injected scratch cleanup failure preserved the original data-mismatch error; successful comparison followed by cleanup failure returned an explicit incomplete-verification error. The test harness then dropped only its recorded leftover databases.
+- Captured output was checked for the fixture passwords. Synthetic rows were deleted only by their recorded owner IDs in the owned fixture database; all owned fixture/scratch databases and credential/dump files were removed. Content-free result records remain outside the checkout.
+
+The checks exposed and fixed Windows PowerShell 5.1 stdin/quote handling, process environment removal and hash calculation without a PowerShell module dependency. They are operational correctness checks, not recognition quality acceptance.
+
+Not verified: clean-host installation, delivered-service execution/account permissions, unattended scheduling, a live configuration switch, other PostgreSQL/PowerShell versions, malicious archive SQL analysis, native Linux/container backup/restore or an accepted Linux runtime/image. Historical fixture rows from other sessions cannot be attributed by these tests and were left untouched; no claim is made that the live database contains no synthetic data.

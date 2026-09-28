@@ -1,20 +1,20 @@
 <#
 .SYNOPSIS
 Back up, restore, or verify the permitted persistent PostgreSQL data (users, current
-profiles, Alembic version) of the development cluster created by setup-postgres.ps1.
+profiles, Alembic version) of an explicitly configured PostgreSQL installation.
 
 .DESCRIPTION
 Backup  : pg_dump (custom format) of exactly public.users, public.extraction_profiles and
           public.alembic_version into a new file outside the repository and outside AppData,
           readable only by the current Windows account. Refuses when the application schema
           holds any other table, and checks the archive listing after the dump.
-Restore : pg_restore of such a dump into an explicit existing database in one transaction.
-          The live application database is refused unless -Force is given.
+Restore : pg_restore into a newly created database owned by the application role.
+          Existing targets (including the live database) are always refused.
 Verify  : restores the dump into a newly created scratch database with a random name,
           compares the table set and per-table row counts/checksums with the source
           database, then drops the scratch database.
 
-Credentials are read from the credential file and passed to the PostgreSQL tools only
+Credentials are read from external config/credential files and passed to the PostgreSQL tools only
 through the PGPASSWORD environment variable of this process; they are never printed.
 #>
 param(
@@ -24,9 +24,14 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$DumpPath,
     [string]$TargetDatabase,
-    [switch]$Force,
-    [string]$DataRoot = 'C:\Users\nikit\TgBotDocsData',
-    [string]$CredentialFile
+    [Parameter(Mandatory = $true)]
+    [string]$DataRoot,
+    [Parameter(Mandatory = $true)]
+    [string]$PgBin,
+    [string]$ConfigPath,
+    [string]$PythonExe,
+    [string]$CredentialFile,
+    [string]$AdminCredentialFile
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 3
@@ -37,9 +42,6 @@ $permittedTables = @('alembic_version', 'extraction_profiles', 'users')
 $orderKeys = @{ alembic_version = 'version_num'; extraction_profiles = 'id'; users = 'telegram_id' }
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$root = [IO.Path]::GetFullPath($DataRoot)
-$bin = Join-Path $root 'postgresql-18.6\pgsql\bin'
-if (-not $CredentialFile) { $CredentialFile = Join-Path $root 'postgresql-dev-credentials.json' }
 
 function Assert-ExternalPath([string]$Path, [string]$What) {
     if (-not [IO.Path]::IsPathRooted($Path)) { throw "$What must be an absolute path." }
@@ -51,23 +53,38 @@ function Assert-ExternalPath([string]$Path, [string]$What) {
     return $full
 }
 
+function Get-DumpHash([string]$Path) {
+    $stream = [IO.File]::OpenRead($Path)
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    try { return [BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+    finally { $algorithm.Dispose(); $stream.Dispose() }
+}
+
 function Invoke-Native([string]$Tool, [string[]]$Arguments, [string]$Failure, [string]$InputText) {
     $executable = Join-Path $bin $Tool
-    if (-not (Test-Path -LiteralPath $executable)) { throw "PostgreSQL tool not found: $Tool. Run setup-postgres.ps1 first." }
-    if ($PSBoundParameters.ContainsKey('InputText')) { $output = $InputText | & $executable @Arguments }
-    else { $output = & $executable @Arguments }
+    if (-not (Test-Path -LiteralPath $executable)) { throw "PostgreSQL tool not found: $Tool. Check -PgBin." }
+    # Native diagnostics can contain SQL/data. Return only the fixed failure text.
+    try {
+        if ($PSBoundParameters.ContainsKey('InputText')) { $output = $InputText | & $executable @Arguments 2>$null }
+        else { $output = & $executable @Arguments 2>$null }
+    } catch { throw $Failure }
     if ($LASTEXITCODE -ne 0) { throw $Failure }
     return $output
 }
 
 $savedEnvironment = @{}
 function Set-SessionEnvironment([string]$Password) {
-    foreach ($name in 'PGPASSWORD', 'PGCONNECT_TIMEOUT', 'PGTZ', 'PGDATESTYLE', 'PGOPTIONS') {
+    foreach ($name in 'PGPASSWORD', 'PGCONNECT_TIMEOUT', 'PGTZ', 'PGDATESTYLE', 'PGOPTIONS', 'PGSSLMODE',
+             'PGSERVICE', 'PGSERVICEFILE', 'PGPASSFILE', 'PGHOST', 'PGHOSTADDR', 'PGPORT', 'PGUSER', 'PGDATABASE') {
         if (-not $savedEnvironment.ContainsKey($name)) {
             $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
         }
     }
     $env:PGPASSWORD = $Password
+    foreach ($name in 'PGSERVICE', 'PGSERVICEFILE', 'PGPASSFILE', 'PGHOST', 'PGHOSTADDR', 'PGPORT', 'PGUSER', 'PGDATABASE') {
+        Remove-Item -LiteralPath ("Env:" + $name) -ErrorAction SilentlyContinue
+    }
+    $env:PGSSLMODE = $credentials.sslmode
     $env:PGCONNECT_TIMEOUT = '10'
     # Identical text rendering of timestamps for source and restored checksums.
     $env:PGTZ = 'UTC'
@@ -76,13 +93,17 @@ function Set-SessionEnvironment([string]$Password) {
 }
 function Restore-SessionEnvironment {
     foreach ($name in @($savedEnvironment.Keys)) {
-        [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name], 'Process')
+        if ($null -eq $savedEnvironment[$name]) {
+            Remove-Item -LiteralPath ("Env:" + $name) -ErrorAction SilentlyContinue
+        } else {
+            Set-Item -LiteralPath ("Env:" + $name) -Value $savedEnvironment[$name]
+        }
     }
 }
 
 function Invoke-Sql($Credentials, [string]$User, [string]$Password, [string]$Database, [string]$Sql) {
     Set-SessionEnvironment $Password
-    $lines = Invoke-Native 'psql.exe' @('-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-h', $Credentials.host,
+    $lines = Invoke-Native 'psql.exe' @('--no-password', '-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-h', $Credentials.host,
         '-p', "$($Credentials.port)", '-U', $User, '-d', $Database) 'PostgreSQL query failed.' $Sql
     return @($lines | Where-Object { $_ -ne '' })
 }
@@ -103,6 +124,74 @@ function Get-TableSummary($Credentials, [string]$User, [string]$Password, [strin
     return @(Invoke-Sql $Credentials $User $Password $Database (($parts -join ' union all ') + ' order by 1;'))
 }
 
+function Read-Credentials([string]$Path) {
+    $full = Assert-ExternalPath $Path 'The credential path'
+    try { $value = Get-Content -Raw -LiteralPath $full | ConvertFrom-Json }
+    catch { throw 'The credential file could not be read.' }
+    return $value
+}
+
+function Read-ConfigConnection([string]$Path) {
+    $full = Assert-ExternalPath $Path 'The configuration path'
+    if (-not $PythonExe) { $script:PythonExe = Join-Path $repoRoot '.venv\Scripts\python.exe' }
+    if (-not (Test-Path -LiteralPath $PythonExe -PathType Leaf)) {
+        throw 'Config parsing requires the installed application Python; supply -PythonExe.'
+    }
+    # dotenv matches the application's quoting rules and disables interpolation.
+    # make_url decodes credentials without feeding a URL/password to any argv.
+    $code = @'
+import json, sys
+from dotenv import dotenv_values
+from sqlalchemy.engine import make_url
+try:
+    url = make_url(dotenv_values(sys.argv[1], interpolate=False)["DATABASE_URL"])
+    if url.drivername not in ("postgresql", "postgresql+psycopg") or set(url.query) - {"sslmode"}:
+        raise ValueError()
+    print(json.dumps(dict(host=url.host, port=url.port or 5432, database=url.database,
+                         username=url.username, password=url.password,
+                         sslmode=url.query.get("sslmode", "prefer"))))
+except Exception:
+    sys.exit(1)
+'@
+    # stdin also avoids Windows PowerShell 5.1's legacy -c quote mangling.
+    try { $result = $code | & $PythonExe - $full 2>$null }
+    catch { throw 'DATABASE_URL could not be parsed; check external configuration.' }
+    if ($LASTEXITCODE -ne 0) { throw 'DATABASE_URL could not be parsed; check external configuration.' }
+    try { return ($result | ConvertFrom-Json) }
+    catch { throw 'DATABASE_URL could not be parsed; check external configuration.' }
+}
+
+function Assert-Connection($Value) {
+    foreach ($key in 'host', 'port', 'database', 'username', 'password') {
+        if (-not ($Value.PSObject.Properties.Name -contains $key) -or $null -eq $Value.$key -or "$($Value.$key)" -eq '') {
+            throw 'The connection file lacks required connection values.'
+        }
+    }
+    if ("$($Value.database)" -notmatch '^[A-Za-z_][A-Za-z0-9_]{0,62}$' -or
+        "$($Value.port)" -notmatch '^\d+$' -or [int]$Value.port -lt 1 -or [int]$Value.port -gt 65535) {
+        throw 'The connection database/port is invalid.'
+    }
+    if (-not ($Value.PSObject.Properties.Name -contains 'sslmode')) {
+        $Value | Add-Member -NotePropertyName sslmode -NotePropertyValue 'prefer'
+    }
+    if ($Value.sslmode -notin @('disable', 'allow', 'prefer', 'require', 'verify-ca', 'verify-full')) {
+        throw 'The connection sslmode is invalid.'
+    }
+}
+
+function Create-OwnedDatabase([string]$Database) {
+    Set-SessionEnvironment $admin.password
+    Invoke-Native 'createdb.exe' @('--no-password', '-h', $credentials.host, '-p', "$($credentials.port)",
+        '-U', $admin.username, '-O', $credentials.username, '-T', 'template0', '-E', 'UTF8', $Database) `
+        'Could not create the new database; it must not exist and the admin role needs CREATEDB.' | Out-Null
+}
+
+function Remove-OwnedDatabase([string]$Database) {
+    Set-SessionEnvironment $admin.password
+    Invoke-Native 'dropdb.exe' @('--no-password', '--if-exists', '--force', '-h', $credentials.host,
+        '-p', "$($credentials.port)", '-U', $admin.username, $Database) 'Scratch database cleanup failed.' | Out-Null
+}
+
 function Assert-DumpListing([string]$Path) {
     $lines = @(Invoke-Native 'pg_restore.exe' @('--list', $Path) 'The dump could not be read as a custom-format archive.')
     $tables = @{}; $data = @{}
@@ -116,8 +205,14 @@ function Assert-DumpListing([string]$Path) {
         }
         $type = $Matches.type; $schema = $Matches.schema; $name = $Matches.name
         if ($schema -ne 'public') { throw 'The dump contains an object outside the public schema.' }
-        if ($type -like 'SEQUENCE*' -and $name -notmatch '^(users|extraction_profiles|alembic_version)_\w+_seq$') {
+        if ($type -like 'SEQUENCE*' -and $name -ne 'users_telegram_id_seq') {
             throw 'The dump contains a sequence that does not belong to a permitted table.'
+        }
+        if ($type -in @('TABLE', 'TABLE DATA', 'CONSTRAINT', 'FK CONSTRAINT', 'DEFAULT') -and $name -notin $permittedTables) {
+            throw 'The dump contains an object belonging to an unapproved table.'
+        }
+        if ($type -eq 'INDEX' -and $name -ne 'ix_extraction_profiles_owner_id') {
+            throw 'The dump contains an unapproved index.'
         }
         if ($type -eq 'TABLE') { $tables[$name] = $true }
         if ($type -eq 'TABLE DATA') { $data[$name] = $true }
@@ -129,20 +224,31 @@ function Assert-DumpListing([string]$Path) {
 }
 
 function Invoke-Restore($Credentials, [string]$Path, [string]$Database) {
-    # One transaction: any error rolls the whole restore back. --clean --if-exists replaces
-    # only the three permitted tables; other objects in the target are not touched.
+    # This helper is called only after this invocation created an empty target.
     Set-SessionEnvironment $Credentials.password
-    Invoke-Native 'pg_restore.exe' @('--single-transaction', '--exit-on-error', '--clean', '--if-exists',
+    Invoke-Native 'pg_restore.exe' @('--no-password', '--single-transaction', '--exit-on-error',
         '--no-owner', '--no-privileges', '-h', $Credentials.host, '-p', "$($Credentials.port)",
         '-U', $Credentials.username, '-d', $Database, $Path) 'pg_restore failed; nothing was committed to the target database.' | Out-Null
 }
 
+$root = Assert-ExternalPath $DataRoot 'DataRoot'
+if (-not (Test-Path -LiteralPath $root -PathType Container)) { throw 'DataRoot must exist.' }
+$bin = [IO.Path]::GetFullPath($PgBin)
+if (-not [IO.Path]::IsPathRooted($PgBin)) { throw 'PgBin must be an absolute path.' }
 $dump = Assert-ExternalPath $DumpPath 'The dump path'
-$credentialPath = [IO.Path]::GetFullPath($CredentialFile)
-if (-not (Test-Path -LiteralPath $credentialPath)) { throw 'The credential file does not exist.' }
-$credentials = Get-Content -Raw -LiteralPath $credentialPath | ConvertFrom-Json
-foreach ($key in 'host', 'port', 'database', 'username', 'password') {
-    if (-not ($credentials.PSObject.Properties.Name -contains $key)) { throw "The credential file lacks the '$key' key." }
+if (([bool]$ConfigPath) -eq ([bool]$CredentialFile)) { throw 'Supply exactly one of -ConfigPath or -CredentialFile.' }
+$credentials = if ($ConfigPath) { Read-ConfigConnection $ConfigPath } else { Read-Credentials $CredentialFile }
+Assert-Connection $credentials
+$admin = $credentials
+if ($AdminCredentialFile) {
+    $admin = Read-Credentials $AdminCredentialFile
+    Assert-Connection $admin
+    if ($admin.host -ne $credentials.host -or $admin.port -ne $credentials.port -or $admin.sslmode -ne $credentials.sslmode) {
+        throw 'Admin credentials must refer to the same PostgreSQL host/port/sslmode.'
+    }
+} elseif ($credentials.PSObject.Properties.Name -contains 'admin_username' -and
+          $credentials.PSObject.Properties.Name -contains 'admin_password') {
+    $admin = [pscustomobject]@{ username = $credentials.admin_username; password = $credentials.admin_password }
 }
 $expectedSet = ($permittedTables | ForEach-Object { "public.$_" } | Sort-Object) -join ','
 
@@ -151,19 +257,21 @@ try {
         if (Test-Path -LiteralPath $dump) { throw 'The dump file already exists; choose a new path. Existing files are never replaced.' }
         $directory = Split-Path -Parent $dump
         if (-not (Test-Path -LiteralPath $directory -PathType Container)) { throw 'The dump directory does not exist.' }
-        $publicTables = @(Get-TableSet $credentials $credentials.database | Where-Object { $_ -like 'public.*' })
-        if ((($publicTables | Sort-Object) -join ',') -ne $expectedSet) {
-            throw 'The application schema holds tables other than the permitted set; review DATA_MODEL before backing up.'
+        $sourceTables = @(Get-TableSet $credentials $credentials.database)
+        if ((($sourceTables | Sort-Object) -join ',') -ne $expectedSet) {
+            throw 'The database table set differs from the permitted set; review DATA_MODEL before backing up.'
         }
         # Create the file first and restrict it to the current account, so the dump is never
         # written into a file with inherited, broader permissions.
-        [IO.File]::WriteAllBytes($dump, [byte[]]@())
+        # CreateNew closes the existence-check race without truncating somebody else's file.
+        $newFile = [IO.File]::Open($dump, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        $newFile.Dispose()
         $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
         & icacls.exe $dump '/inheritance:r' '/grant:r' ($identity + ':F') *> $null
         if ($LASTEXITCODE -ne 0) { Remove-Item -LiteralPath $dump -Force; throw 'Could not restrict the dump file.' }
         try {
             Set-SessionEnvironment $credentials.password
-            $arguments = @('--format=custom', '--no-owner', '--no-privileges', '-h', $credentials.host,
+            $arguments = @('--no-password', '--format=custom', '--no-owner', '--no-privileges', '-h', $credentials.host,
                 '-p', "$($credentials.port)", '-U', $credentials.username, '-d', $credentials.database, '-f', $dump)
             foreach ($table in $permittedTables) { $arguments += @('--table', "public.$table") }
             Invoke-Native 'pg_dump.exe' $arguments 'pg_dump failed.' | Out-Null
@@ -172,7 +280,7 @@ try {
             Remove-Item -LiteralPath $dump -Force -ErrorAction SilentlyContinue
             throw
         }
-        $hash = (Get-FileHash -LiteralPath $dump -Algorithm SHA256).Hash.ToLowerInvariant()
+        $hash = Get-DumpHash $dump
         Write-Output "Backup written: $dump ($((Get-Item -LiteralPath $dump).Length) bytes, SHA-256 $hash)."
         Write-Output 'Contents: users, extraction_profiles, alembic_version. Access: current Windows account only.'
     } else {
@@ -181,26 +289,26 @@ try {
         if ($Action -eq 'Restore') {
             if (-not $TargetDatabase) { throw 'Restore requires -TargetDatabase.' }
             if ($TargetDatabase -notmatch '^[A-Za-z_][A-Za-z0-9_]{0,62}$') { throw 'The target database name is not a plain identifier.' }
-            if ($TargetDatabase -eq $credentials.database -and -not $Force) {
-                throw 'The target is the live application database; stop the bot and pass -Force to replace its profiles.'
+            if ($TargetDatabase -eq $credentials.database) {
+                throw 'The target is the live application database; in-place restore is never permitted.'
             }
-            Invoke-Restore $credentials $dump $TargetDatabase
+            Create-OwnedDatabase $TargetDatabase
+            try { Invoke-Restore $credentials $dump $TargetDatabase }
+            catch {
+                $restoreFailure = $_
+                try { Remove-OwnedDatabase $TargetDatabase }
+                catch { Write-Warning "Restore target cleanup failed: $TargetDatabase. Remove this newly created database manually." }
+                throw $restoreFailure
+            }
             Write-Output "Restored users, extraction_profiles and alembic_version into '$TargetDatabase' in one transaction."
         } else {
-            foreach ($key in 'admin_username', 'admin_password') {
-                if (-not ($credentials.PSObject.Properties.Name -contains $key)) {
-                    throw 'Verify needs the admin role from the credential file to create a scratch database.'
-                }
-            }
             # The application role has no CREATEDB privilege; the local admin role creates the
             # scratch database owned by the application role, which then restores into it
             # exactly as Restore would.
             $scratch = 'tgbotdocs_verify_' + [guid]::NewGuid().ToString('N').Substring(0, 16)
-            Set-SessionEnvironment $credentials.admin_password
-            Invoke-Native 'createdb.exe' @('-h', $credentials.host, '-p', "$($credentials.port)", '-U',
-                $credentials.admin_username, '-O', $credentials.username, '-T', 'template0', '-E', 'UTF8', $scratch) `
-                'Could not create the scratch database.' | Out-Null
+            Create-OwnedDatabase $scratch
             Write-Output "Created scratch database $scratch."
+            $verificationPassed = $false
             try {
                 Invoke-Restore $credentials $dump $scratch
                 $restoredSet = (Get-TableSet $credentials $scratch | Sort-Object) -join ','
@@ -216,12 +324,17 @@ try {
                     Write-Output "$($s[0]): source rows=$($s[1]), restored rows=$($r[1]), checksum $state."
                 }
                 if ($mismatch) { throw 'Restored data differs from the current source database (it may have changed after the backup).' }
+                $verificationPassed = $true
                 Write-Output 'Verification passed.'
             } finally {
-                Set-SessionEnvironment $credentials.admin_password
-                Invoke-Native 'dropdb.exe' @('--if-exists', '--force', '-h', $credentials.host, '-p', "$($credentials.port)",
-                    '-U', $credentials.admin_username, $scratch) 'Could not drop the scratch database; drop it manually.' | Out-Null
-                Write-Output "Dropped scratch database $scratch."
+                try {
+                    Remove-OwnedDatabase $scratch
+                    Write-Output "Dropped scratch database $scratch."
+                } catch {
+                    Write-Warning "Scratch cleanup failed: $scratch. Remove this owned database manually."
+                    # Preserve the original restore/comparison exception, if any.
+                    if ($verificationPassed) { throw 'Verification matched, but scratch database cleanup failed.' }
+                }
             }
         }
     }
