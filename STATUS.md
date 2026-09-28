@@ -4,13 +4,21 @@ Updated: 2026-09-28.
 
 ## Current Stage
 
-**T01b is calibrated and frozen; T02 implementation is active.** The developer's 22-case reviewed manifest was calibrated successfully. `runner freeze --auto` selected point 127 and wrote `C:\Users\nikit\TgBotDocsData\dev\frozen\frozen-t01b.json` (SHA-256 `dd1d01a0e8ff878a60b7b4bf61b6bcb20939cd5bd5695bed4eaa79a55ea633f6`). See [T01b calibration report](docs/testing/T01B_CALIBRATION_REPORT.md). Under the developer's 2026-09-28 decision (S-14), T01c preparation and the sealed run are deferred until the complete product is available in Telegram; T02 proceeds after T01b freeze. The benchmark remains mandatory and **recognition quality is not accepted**. Real-Telegram E2E and native Linux verification have not been performed.
+**T01b is calibrated and frozen; T02 is verified locally and T03 implementation is active.** The developer's 22-case reviewed manifest was calibrated successfully. `runner freeze --auto` selected point 127 and wrote `C:\Users\nikit\TgBotDocsData\dev\frozen\frozen-t01b.json` (SHA-256 `dd1d01a0e8ff878a60b7b4bf61b6bcb20939cd5bd5695bed4eaa79a55ea633f6`). See [T01b calibration report](docs/testing/T01B_CALIBRATION_REPORT.md). Under the developer's 2026-09-28 decision (S-14), T01c preparation and the sealed run are deferred until the complete product is available in Telegram; T02 proceeds after T01b freeze. The benchmark remains mandatory and **recognition quality is not accepted**. Real-Telegram E2E and native Linux verification have not been performed.
 
 ## Stop Point (2026-09-28, active continuation)
 
 - Done: the developer (Nikita) reviewed the tuning set at 01:41; `review-apply` wrote `C:\Users\nikit\TgBotDocsData\corpora\t01b-tuning-review-v3\reviewed-manifest.json` (sha256 `022fd0b2…`): 22 verified, tune-17/tune-22/tune-23 rejected and excluded, no calibration eligibility blockers.
 - Done: the completed calibration report at `C:\Users\nikit\TgBotDocsData\dev\measurements\t01b-calibration.json` was found and reused. Calibration eligibility passed; no environment change during collection. Automatic freeze succeeded without an override: 85 accepted values and 16 automatic profiles, zero errors; readable completeness 68/75. Current recognition identity still matches after adding application dependencies.
-- In progress: T02 application foundation, local PostgreSQL setup/migrations, per-call fair scheduler, actor/transport walking path, supervision and temporary lifecycle. Work is on `main`; inspect the current diff before resuming. Do not change frozen recognition files or dependencies without a new calibration.
+- Done: T02 Windows foundation: PostgreSQL 18.6 on loopback port 55432, real migrations and owner-isolated storage, per-call fair scheduling, supervised child processes, owned temporary cleanup/recovery, and a controlled Telegram walking path. See [T02 report](docs/testing/T02_FOUNDATION_REPORT.md). The native runtime startup check and controlled real-model synthetic image check passed. No real Telegram request was made.
+- In progress: T03 shared-password protection, instruction compilation and owner-scoped profile previews/dialogues. Compiler/preview implementation and access checks are in the current diff; production dialogue integration remains. Work is on `main`; inspect the diff before resuming. Do not change frozen recognition files or dependencies without a new calibration.
+- Local verification configuration is outside Git at `C:\Users\nikit\TgBotDocsData\foundation-check.env`; it contains a synthetic Telegram token/password. PostgreSQL credentials are in `C:\Users\nikit\TgBotDocsData\postgresql-dev-credentials.json`. Do not print either file. PostgreSQL binaries and the cluster are under the same data root; [local setup commands](docs/operations/POSTGRESQL_DEVELOPMENT.md) start/stop them.
+
+## Unattended Continuation and Usage Limit
+
+The developer is away and authorized independent continuation, installation of necessary local dependencies, and small verified commits with descriptive bodies. Record developer-only decisions as deferred and continue independent work. Check the five-hour account window after substantial results and approximately every ten minutes. When remaining allowance is below 10%, finish or stop background work safely, commit verified results, record exact unfinished files/checks here, and stop all development until reset.
+
+The one-time heartbeat `tgbotdocs-resume-after-usage-reset` targets this same conversation at **2026-09-28 06:51:26 Europe/Bratislava** (04:51:26 UTC), two minutes after the current reset at 06:49:26. Its saved schedule and the PC's Central Europe time zone were checked. The PC and Codex app must remain running. At wake-up, check allowance before resuming; if still below 10%, move the same heartbeat to the next reset plus two minutes and stop again. Do not spend forced-reset credits. Remove the heartbeat when the goal is complete.
 
 ## Next Steps (in order)
 
@@ -21,7 +29,7 @@ Updated: 2026-09-28.
 
 ## Continuing in Codex
 
-Work on `main` in `C:\CodeProj\TgBotDocs\TgBotDocs`; it is the only branch and the only worktree. The earlier Codex and subagent worktrees and branches were removed on 2026-09-28 at the developer's request, after checking that every commit and file in them was already on `main`. Use the data paths from the table in [T01_PROCEDURE](docs/testing/T01_PROCEDURE.md) (`C:\Users\nikit\TgBotDocsData\...`); never `%LOCALAPPDATA%`, which both Codex and Claude virtualize. The session paused at 83% of the 5-hour usage window on 2026-09-28 with nothing automatable left before the developer's tuning review; the next assistant step is calibration (Next Steps item 2).
+Work on `main` in `C:\CodeProj\TgBotDocs\TgBotDocs`; it is the only branch and the only worktree. The earlier Codex and subagent worktrees and branches were removed on 2026-09-28 at the developer's request, after checking that every commit and file in them was already on `main`. Use the data paths from the table in [T01_PROCEDURE](docs/testing/T01_PROCEDURE.md) (`C:\Users\nikit\TgBotDocsData\...`); never `%LOCALAPPDATA%`, which both Codex and Claude virtualize. The earlier pause before tuning review is resolved: calibration and freeze are complete. Resume from the current Stop Point above.
 
 ## Evidence (2026-09-28)
 

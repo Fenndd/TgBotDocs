@@ -1,6 +1,6 @@
 # Decision and Remaining Verification Register
 
-Updated: 2026-09-28, after the T01b freeze, T01c timing decision, and local dependency authorization. The main first-version product and architectural questions have been closed by direct developer answers. Sources: [S-01–S-15](SOURCES.md).
+Updated: 2026-09-28, after the T01b freeze and the development-continuation instructions. The main first-version product and architectural questions have been closed by direct developer answers. Sources: [S-01–S-16](SOURCES.md).
 
 ## Decisions Made
 
@@ -26,6 +26,7 @@ Updated: 2026-09-28, after the T01b freeze, T01c timing decision, and local depe
 | Q-018 | Active documents take turns on the GPU, one model call each, in admission order; a long document does not block short ones, and its 30-minute budget counts only its own work | S-12-A1; [STATE_MACHINE](../architecture/STATE_MACHINE.md) |
 | Q-019 | Profiles can be edited while the user's document is queued or processed, but not while the bot waits for the user's answer about it; the running document keeps its snapshot; a document question waits until an open profile draft is closed | S-13-A1; supersedes ED-004 |
 | Q-020 | T01b is frozen and permits T02–T08 work in order, but does not accept recognition quality. Defer T01c benchmark preparation and the one sealed integrated run until the complete product is available through Telegram and the final real-Telegram end-to-end test can be performed with the developer. The benchmark remains required acceptance | S-14-A1–A5; sequencing changes, while accepted criteria remain in force |
+| Q-021 | While the developer is absent, continue independent work and defer developer-only decisions. Work in small logical units, verify before committing, install local dependencies under S-15, and observe the five-hour usage guard: below 10% remaining, save the exact stop point, stop all work, and resume only in the same thread after reset plus two minutes | S-16; no product scope change or authorization for remote resources/messages |
 
 Project details — field types, versioning, retry timers, resource protection, and libraries — are explicitly described in the contracts/operations documents. They are not attributed verbatim to TT.txt. The key decisions and user-facing time limits above are kept separate from engineering defaults.
 

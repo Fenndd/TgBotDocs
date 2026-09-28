@@ -106,6 +106,14 @@ Direct developer instruction:
 
 - Install missing PostgreSQL and any subsequent dependencies needed on the current PC autonomously, without asking again. Official native PostgreSQL 18.6 ZIP is installed and the local database is verified. This authorization covers local dependencies only; it does not authorize remote resources or messages.
 
+## S-16 — Development Continuation and Usage Guard, 2026-09-28
+
+Direct developer instruction:
+
+- While the developer is absent, continue independent work and defer decisions that require the developer.
+- Make small, logical changes; run the relevant checks and commit each verified unit. Local dependency installation remains authorized under S-15; this grants no authority for remote resources or messages.
+- Monitor the five-hour usage window. When less than 10% remains, save the precise stop point and stop all work. Resume in the same thread only after the usage window resets and wait an additional two minutes.
+
 ## E-01 — Hardware Check
 
 Only hardware specifications were read using Windows CIM and `nvidia-smi`, on 2026-09-27:

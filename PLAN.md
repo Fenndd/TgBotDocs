@@ -1,14 +1,16 @@
 # Development Plan
 
-Status: implementation authorized and active; updated 2026-09-28. T01b is calibrated and frozen on 22 reviewed cases; T02 implementation is active. [STATUS](STATUS.md) records the current state and evidence; the [T01 procedure](docs/testing/T01_PROCEDURE.md) gives the benchmark preparation rules.
+Status: implementation authorized and active; updated 2026-09-28. T01b is calibrated and frozen on 22 reviewed cases; T02 local foundation checks are complete and T03 implementation is active. The [T02 foundation report](docs/testing/T02_FOUNDATION_REPORT.md) records verified behavior and remaining checks; [STATUS](STATUS.md) records the current phase.
 
 ## Current Execution Sequence
 
-1. Continue T02 through T06 in order, then T07 and T08, under the existing [roadmap](docs/planning/ROADMAP.md) and specifications. T01b is calibrated and frozen; T02 does not wait for T01c.
+1. Continue T03 through T06 in order, then T07 and T08, under the existing [roadmap](docs/planning/ROADMAP.md) and specifications. T02's local foundation is verified; T01c does not gate implementation.
 2. Perform T07's local functional, isolation, and resilience checks as the implementation becomes available. These checks may precede final real-Telegram E2E and do not constitute recognition-quality or complete-product acceptance.
 3. Prepare T08 and perform available local packaging checks after T07's local checks. Keep native Linux results distinct; the current Windows PC does not verify that platform.
 4. After the complete product is available through Telegram, perform the final real-Telegram E2E jointly with the developer, then prepare, review, seal, and run the single 70-case integrated benchmark for both T01c and T07. The benchmark remains required acceptance; T01b freeze does not accept recognition quality. Do not schedule a second sealed run for T07.
 5. Remote deployment remains deferred. Follow the benchmark ledger and record unperformed checks honestly.
+
+While the developer is absent, continue independent work and defer developer-only decisions. Make small logical changes, verify each unit before committing, and follow the usage guard in [S-16](docs/requirements/SOURCES.md): below 10% of the five-hour window, save the exact stop point, stop all work, and resume in the same thread only after reset plus two minutes.
 
 The rest of this file records the completed planning package. Its old session exclusions do not override the current development authorization.
 
