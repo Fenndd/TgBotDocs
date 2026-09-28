@@ -1,13 +1,14 @@
 # Development Plan
 
-Status: implementation authorized and active; updated 2026-09-28. T01b tooling is implemented and tested; the next steps need the developer's human review and photographs. [STATUS](STATUS.md) records the current state and evidence; the [T01 procedure](docs/testing/T01_PROCEDURE.md) gives the exact commands.
+Status: implementation authorized and active; updated 2026-09-28. T01b is calibrated and frozen on 22 reviewed cases; T02 implementation is active. [STATUS](STATUS.md) records the current state and evidence; the [T01 procedure](docs/testing/T01_PROCEDURE.md) gives the benchmark preparation rules.
 
 ## Current Execution Sequence
 
-1. T01b (developer): review the 25-case tuning set in its review form and apply the decisions. Then (assistant): run calibration, freeze with the pre-declared rule (ED-014), and record the calibration report with risk–coverage curves and per-page times. If no zero-error point exists, follow ADR-0004's remediation order on this PC.
-2. T01c (developer): generate the benchmark plan, print and photograph the 20 difficult cases, deliver the photo-path cases through Telegram, and review all 70 cases. Then (assistant): ingest, seal against the frozen configuration, run the benchmark once, and report against ACCEPTANCE_PLAN. Do not begin T02 before it passes.
-3. T02 through T08: follow the existing [roadmap](docs/planning/ROADMAP.md) and specifications, with logically complete verified local commits and a separate final quality pass.
-4. Defer final real-Telegram E2E and remote deployment per the user's current instruction. Record unavailable native Linux verification honestly; do not substitute Windows or WSL evidence.
+1. Continue T02 through T06 in order, then T07 and T08, under the existing [roadmap](docs/planning/ROADMAP.md) and specifications. T01b is calibrated and frozen; T02 does not wait for T01c.
+2. Perform T07's local functional, isolation, and resilience checks as the implementation becomes available. These checks may precede final real-Telegram E2E and do not constitute recognition-quality or complete-product acceptance.
+3. Prepare T08 and perform available local packaging checks after T07's local checks. Keep native Linux results distinct; the current Windows PC does not verify that platform.
+4. After the complete product is available through Telegram, perform the final real-Telegram E2E jointly with the developer, then prepare, review, seal, and run the single 70-case integrated benchmark for both T01c and T07. The benchmark remains required acceptance; T01b freeze does not accept recognition quality. Do not schedule a second sealed run for T07.
+5. Remote deployment remains deferred. Follow the benchmark ledger and record unperformed checks honestly.
 
 The rest of this file records the completed planning package. Its old session exclusions do not override the current development authorization.
 
@@ -22,7 +23,7 @@ The rest of this file records the completed planning package. Its old session ex
 
 ## Completion Condition for the Current Task
 
-The main decisions have been aligned; the documents are consistent and checked; the next work is the specific implementation of [T01a](specs/T01-recognition-baseline.md). The actual status of checks is recorded in [STATUS.md](STATUS.md).
+The main decisions have been aligned; T01b is frozen and the current work is T02–T08. Final quality acceptance remains pending the one integrated T01c/T07 benchmark run after the complete product is available through Telegram. The actual status of checks is recorded in [STATUS.md](STATUS.md).
 
 Untested models are not declared suitable: T01 contains criteria for continuing, the remediation order on the current PC, and the point at which scope or criteria return to the developer. Selecting test corpus materials, pinning exact dependency versions, and running on Linux are defined tasks for future development, not unresolved fundamental decisions.
 

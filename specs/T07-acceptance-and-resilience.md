@@ -1,6 +1,6 @@
 # T07 — Acceptance of Quality, Isolation, and Resilience
 
-Status: specification ready; execution after T01–T06. Date: 2026-09-27; revised after the independent review (sealed benchmark, delivery paths, compiled profiles, zero-error bounds). Tests are not run in the planning session.
+Status: local T07 implementation and resilience checks may proceed after T02–T06; full acceptance remains pending. T01c and T07 share one sealed integrated 70-case quality run, deferred until the complete product is available through Telegram and the final real-Telegram E2E can be done with the developer. Date: 2026-09-28; existing criteria remain unchanged.
 
 ## Goal and Basis
 
@@ -11,8 +11,9 @@ Basis: [PRODUCT_SPEC](../docs/requirements/PRODUCT_SPEC.md); [TEST_STRATEGY](../
 ## Scope and Dependencies
 
 - Test integrated T02–T06 and the frozen [T01](T01-recognition-baseline.md) configuration, not responses from a separately run model. Profiles are compiled by the product's instruction compiler and confirmed through the preview, not the hand-authored fixtures of T01b.
+- Local functional, isolation, cleanup, and resilience checks may be completed before final real-Telegram E2E. T01b freeze is not recognition-quality acceptance. Defer the one integrated sealed quality run until the complete product is available through Telegram; its result supplies both T01c and T07 quality acceptance. Do not run a separate core-only sealed benchmark.
 - The sample and ground truths follow [ACCEPTANCE_PLAN](../docs/testing/ACCEPTANCE_PLAN.md): synthetic or authorized data, different documents/languages/layouts, phone photos, and recorded delivery paths through the real bot. User uploads do not become a permanent test archive.
-- S-09-A2 is accepted: 40 readable + 20 difficult + 10 negative cases; 0 incorrectly accepted values/automatic profiles and at least 90% of requested readable fields/cells. The benchmark is sealed: cases examined for tuning after T01c are replaced before this run.
+- S-09-A2 is accepted: 40 readable + 20 difficult + 10 negative cases; 0 incorrectly accepted values/automatic profiles and at least 90% of requested readable fields/cells. The same sealed set is used for the single T01c/T07 integrated run. A case examined individually to change prompts, thresholds, signals, or rules becomes a tuning case and must be replaced before a later acceptance run under the frozen-identity rules.
 - Any language is accepted without a whitelist, with honest uncertainty; the test set does not prove support for all writing systems. Specific materials and ground truths are created/checked in T01.
 
 ## Verification Matrix
@@ -35,11 +36,11 @@ Basis: [PRODUCT_SPEC](../docs/requirements/PRODUCT_SPEC.md); [TEST_STRATEGY](../
 2. Actual verification commands/scenarios for the future project with pinned versions, configuration, results, and known untested cases.
 3. Separate report of incorrectly accepted values, refusals/missing values, correct fields/cells, incorrect profiles, and fully successful documents; state the exact denominator and the zero-error bound for every metric and group.
 4. Measurements of memory/time on the PC, resilience across sequential tasks, and cleanup under simulated failures. No conclusions about the customer's unknown multi-user workload.
-5. Nonconformity checklist with reproduction steps; fixes rerun affected scenarios, then the sealed final sample.
+5. Nonconformity checklist with reproduction steps; fixes rerun affected local scenarios. Do not run the same sealed benchmark identity a second time; any later acceptance run must follow the ledger and the frozen-identity rules.
 
 ## Acceptance and Limitations
 
-Mark each case/group verified / not verified / failed; all required groups need factual confirmation. Check both the absence of incorrectly accepted facts and useful completeness: refusing everything is not a successful product. Required cases include a partial table as the only field, a profile edited during matching or extraction (the job keeps its snapshot), cleanup when dependencies are unavailable, and cancellation racing with a send.
+Mark each case/group verified / not verified / failed; all required groups need factual confirmation. Check both the absence of incorrectly accepted facts and useful completeness: refusing everything is not a successful product. Local resilience results can be recorded before the final Telegram E2E, but do not count as complete acceptance. Required cases include a partial table as the only field, a profile edited during matching or extraction (the job keeps its snapshot), cleanup when dependencies are unavailable, and cancellation racing with a send.
 
 JSON schema, verbal confidence, model self-assessment, and quoted evidence do not replace an independent ground truth. The absence of files after ordinary success does not prove cleanup after a crash. Do not include document data in a public report.
 

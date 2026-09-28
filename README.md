@@ -2,7 +2,7 @@
 
 Stage: T01 implementation is active. [T01a runtime feasibility](docs/testing/T01A_REPORT.md) meets the technical condition to implement T01b; quality acceptance and the finished bot remain incomplete. The intended bot receives documents in Telegram and returns only the data requested in the user's personal text settings. The first version accepts arbitrary documents in any languages, with an honest refusal when they cannot be read; processing is local and must fit the current PC's hardware.
 
-The selected stack is Python + aiogram + PostgreSQL and direct local Qwen3-VL-4B-Instruct Q4_K_M through llama.cpp. Current experimental commands and their limitations are recorded in the [T01a report](docs/testing/T01A_REPORT.md). Human corpus review, T01b calibration, and the sealed T01c gate are still required before T02. Final real-Telegram testing and remote deployment are deferred by the current task instruction.
+The selected stack is Python + aiogram + PostgreSQL and direct local Qwen3-VL-4B-Instruct Q4_K_M through llama.cpp. Current experimental commands and their limitations are recorded in the [T01a report](docs/testing/T01A_REPORT.md). T01b is calibrated and frozen on 22 reviewed cases, and T02 is active. Recognition quality is not accepted yet. Defer benchmark preparation and the single sealed integrated run shared by T01c and T07 until the complete product is available through Telegram and the final real-Telegram E2E can be done with the developer. Local T07 resilience checks and T08 preparation may proceed first; they do not complete acceptance.
 
 ## Navigation
 

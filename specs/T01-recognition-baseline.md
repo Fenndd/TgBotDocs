@@ -1,6 +1,6 @@
 # T01 — Direct Recognition Check on the Current PC
 
-Status: implementation active, 2026-09-28. T01a's technical transition condition is met ([report](../docs/testing/T01A_REPORT.md)). The T01b recognition core, calibration runner, freeze step, tuning-set canonicalization, human-review tooling, and T01c benchmark preparation are implemented and tested ([procedure](../docs/testing/T01_PROCEDURE.md)); the human review of the tuning set, calibration, freeze, the physical photographs and Telegram photo delivery of the benchmark, and the benchmark run have not been performed. The requirements below remain the accepted stage sequence and criteria.
+Status: T01b calibrated and frozen on 2026-09-28. The developer-reviewed tuning manifest contains 22 verified cases; see the [calibration report](../docs/testing/T01B_CALIBRATION_REPORT.md). The T01b core, calibration runner, freeze step, review tooling, and T01c benchmark tooling are implemented and tested ([procedure](../docs/testing/T01_PROCEDURE.md)). T02–T08 may proceed in order. Recognition quality is not accepted. Defer T01c benchmark preparation and the single sealed integrated run shared with T07 until the complete product is available through Telegram and the final real-Telegram E2E can be done with the developer.
 
 ## Goal and Basis
 
@@ -35,13 +35,15 @@ Scope: the recognition core as the future production module of T05, not a throwa
 
 Result: the frozen configuration, the calibration report, and the per-page times.
 
-## T01c — Benchmark Gate
+## T01c — Required Sealed Benchmark
 
-1. Prepare the sealed 70-case benchmark (40 readable, 20 difficult, 10 negative) with delivery paths and reviewed ground truth. Preparation may run in parallel with T01a and T01b; benchmark cases are never used for tuning.
-2. Run the benchmark once with the frozen configuration.
+Timing: defer corpus preparation, sealing, and the one required integrated run until the complete product is available through Telegram and the final real-Telegram E2E can be done with the developer. T02–T08 may proceed after the T01b freeze. This run is shared with T07's integrated quality acceptance; no separate core-only sealed run is required.
+
+1. Prepare the sealed 70-case benchmark (40 readable, 20 difficult, 10 negative) with delivery paths and reviewed ground truth after the stated Telegram-product precondition is met; benchmark cases are never used for tuning.
+2. Run the sealed 70-case set once through the completed integrated product with the frozen T01b configuration and T07's compiled profiles. This one integrated run supplies the T01c and T07 quality-acceptance result.
 3. Report per ACCEPTANCE_PLAN: incorrectly accepted values, incorrect automatic profiles, completeness with its denominator, zero-error bounds, per-group metrics, lists, refusals, resources, p50/p95 times, per-page times, and failures. The external English response must not add unrequested fields.
 
-Pass: continue to T02. Failure: record the verified negative result, analyze errors on the tuning set and replaced cases, and follow the remediation order of ADR-0004 on this PC. When those options are exhausted, the developer decides whether to narrow the v1 scope or revise the criteria. Conclusions must not be substituted by lowering the threshold retroactively.
+Pass: record recognition quality as accepted against the existing criteria and use the same result for T07's integrated quality check. Failure: record the verified negative result, analyze errors on the tuning set and replaced cases, and follow the remediation order of ADR-0004 on this PC. When those options are exhausted, the developer decides whether to narrow the v1 scope or revise the criteria. Conclusions must not be substituted by lowering the threshold retroactively.
 
 ## Checks and Completion Criteria
 

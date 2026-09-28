@@ -1,6 +1,6 @@
 # T05 — Local Profile Matching and Extraction
 
-Status: specification ready; execution after T01/T03/T04. Date: 2026-09-27; revised after the independent review (recognition core from T01b, matching view, batch merging, verification layer). No implementation is created in the planning session.
+Status: specification ready; execution after frozen T01b, T03, and T04. Date: 2026-09-27; revised after the independent review (recognition core from T01b, matching view, batch merging, verification layer). T01c quality acceptance remains pending but does not gate implementation.
 
 ## Goal and Basis
 

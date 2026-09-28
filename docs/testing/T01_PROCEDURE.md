@@ -1,6 +1,6 @@
 # T01b/T01c Operating Procedure
 
-Status: tooling implemented and tested on 2026-09-28; the human steps below have not been performed. This procedure applies [T01](../../specs/T01-recognition-baseline.md), [ACCEPTANCE_PLAN](ACCEPTANCE_PLAN.md), and [ADR-0004](../decisions/ADR-0004-abstention-and-verification.md); the engineering choices it relies on are ED-014 and ED-015 in the [decision register](../requirements/OPEN_QUESTIONS.md).
+Status: T01b review, calibration, and freeze completed on 2026-09-28; see the [calibration report](T01B_CALIBRATION_REPORT.md). Benchmark tooling is implemented and tested, but T01c corpus preparation and the single sealed integrated run remain deferred until the complete product is available through Telegram and the final real-Telegram E2E can be done with the developer. T01c and T07 share that one run. This procedure applies [T01](../../specs/T01-recognition-baseline.md), [ACCEPTANCE_PLAN](ACCEPTANCE_PLAN.md), and [ADR-0004](../decisions/ADR-0004-abstention-and-verification.md); the engineering choices it relies on are ED-014–ED-016 in the [decision register](../requirements/OPEN_QUESTIONS.md).
 
 ## Locations on the development PC
 
@@ -50,7 +50,9 @@ The runner collects one policy-independent trace per case (V2 alternate readings
 
 `freeze --auto` applies the pre-declared selection rule (ED-014): only points with zero incorrect accepted values, zero incorrect automatic profiles, and no unreplayable cases qualify; maximum readable completeness wins; ties prefer V2 off, then the higher V1 threshold, then the higher matching margin. It refuses when no point qualifies (`calibration_no_zero_error_point`: follow the ADR-0004 remediation order) and when the selected completeness is below 0.90 unless `--accept-below-target` is given deliberately. The frozen configuration binds runtime artifacts, launch profile, core settings, prompt identity, policy, dependency versions, the recognition code hash, calibration provenance, and admission per-page times (p5/p50/p95 by page kind). Any code, prompt, dependency, or runtime change afterwards invalidates it.
 
-## Stage 4 — Sealed benchmark preparation (developer and assistant)
+## Stage 4 — Deferred sealed benchmark preparation (developer and assistant)
+
+Begin this stage only after the complete product is available through Telegram and the developer can participate in the final real-Telegram E2E. The benchmark remains required recognition-quality acceptance.
 
 Follow [README-benchmark](../../tools/t01/README-benchmark.md) for the exact steps. In short:
 
@@ -62,12 +64,8 @@ Follow [README-benchmark](../../tools/t01/README-benchmark.md) for the exact ste
 
 No model run may touch benchmark cases before sealing, and a benchmark case whose individual failure details are examined to change prompts, thresholds, signals, or rules becomes a tuning case and must be replaced.
 
-## Stage 5 — Benchmark run (once per frozen configuration)
+## Stage 5 — Deferred single integrated benchmark run (T01c and T07)
 
-```powershell
-.venv\Scripts\python.exe -m tgbotdocs.recognition.runner benchmark --manifest <sealed manifest> `
-  --config <data root>\frozen\frozen-t01b.json --registry <package>\reviewed-manifest.json `
-  --data-root <data root> --output <data root>\measurements\benchmark.json
-```
+Run only after the complete product is available through Telegram, the final E2E can be performed with the developer, and Stage 4 is complete. Run the sealed set once through the integrated product with the frozen T01b configuration and T07's compiled profiles. This single result supplies both T01c recognition-quality acceptance and T07 integrated quality acceptance.
 
-The command verifies the seal, eligibility, split separation against the calibrated tuning manifest, and that the current code, prompts, dependencies, and runtime equal the frozen ones. A ledger refuses a second run of the same configuration (also under a re-frozen copy with identical behavior); an interrupted run must be acknowledged explicitly with `--acknowledge-incomplete-run`. The report contains the accepted criteria's inputs; the pass/fail decision against [ACCEPTANCE_PLAN](ACCEPTANCE_PLAN.md) is recorded by a person in the T01c report. Pass allows T02; failure follows the ADR-0004 remediation order on this PC.
+The current `tgbotdocs.recognition.runner benchmark` command is a core-only runner, not the integrated product check. Do not use it as a separate acceptance run: it consumes the single-run benchmark ledger and cannot be followed by another sealed T07 run. The integrated execution route and its command must be recorded after that product path has been implemented and verified; do not invent a command in advance. The report must include the inputs to the accepted criteria in [ACCEPTANCE_PLAN](ACCEPTANCE_PLAN.md). Failure follows the ADR-0004 remediation order on this PC.

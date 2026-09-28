@@ -1,6 +1,6 @@
 # Sources and Status of Claims
 
-Analysis date: 2026-09-27. This document contains links and analysis conclusions, not a copy of the task or conversation.
+Analysis date: 2026-09-28. This document contains links and analysis conclusions, not a copy of the task or conversation.
 
 ## S-01 — Initial Idea
 
@@ -89,6 +89,22 @@ Direct developer statement after the independent pre-development review:
 ## S-13 — Profile Changes During Processing, 2026-09-27
 
 - **S-13-A1:** Profiles can be edited while the user's document is queued or being processed, but not while the bot waits for the user's answer about that document. An edit does not affect a document already in progress, which keeps its snapshot of the profiles. A question about the document waits until an open profile draft is saved or cancelled. This replaces the earlier engineering choice of read-only Settings during a whole job (ED-004).
+
+## S-14 — T01c Timing and Acceptance, 2026-09-28
+
+Direct developer decision:
+
+- **S-14-A1:** Defer T01c benchmark preparation and the sealed run until the complete product is available through Telegram.
+- **S-14-A2:** T02 may proceed after T01b is reviewed, calibrated, and frozen; T01c is not a prerequisite for starting T02.
+- **S-14-A3:** Freezing T01b does not accept recognition quality. The T01c benchmark remains required acceptance against the existing criteria.
+- **S-14-A4:** Continue T02–T08 in order after the T01b freeze. Local T07 resilience checks and T08 preparation may proceed before the final real-Telegram end-to-end test and deferred benchmark, but they do not complete those acceptance checks.
+- **S-14-A5:** Perform the final real-Telegram end-to-end test jointly with the developer after the complete product is available through Telegram.
+
+## S-15 — Local Dependency Installation Authorization, 2026-09-28
+
+Direct developer instruction:
+
+- Install missing PostgreSQL and any subsequent dependencies needed on the current PC autonomously, without asking again. Official native PostgreSQL 18.6 ZIP is installed and the local database is verified. This authorization covers local dependencies only; it does not authorize remote resources or messages.
 
 ## E-01 — Hardware Check
 

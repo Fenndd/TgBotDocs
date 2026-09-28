@@ -1,12 +1,12 @@
 # T08 — Reproducible Delivery to the Customer
 
-Status: specification ready; execution after T01–T07. Date: 2026-09-27; revised after the independent review (packaging per ADR-0005, native Linux host, reference hardware, license list). External hosting, server creation, and environment setup are not performed now.
+Status: local T08 preparation and platform checks may proceed after T07's local checks; full handoff acceptance remains pending. The final real-Telegram E2E and the one integrated sealed benchmark shared by T01c/T07 must be completed with the developer, and native Linux verification remains required. Updated 2026-09-28. External hosting, server creation, and environment setup are not performed now.
 
 ## Goal and Basis
 
 Deliver the finished product with reproducible local startup, settings, migrations, data deletion rules, and confirmed limitations; the customer will be able to deploy it on the agreed machine.
 
-Basis: [PRODUCT_SPEC](../docs/requirements/PRODUCT_SPEC.md), REQ-014/017/020/023–026/032; [DATA_MODEL](../docs/architecture/DATA_MODEL.md); [SECURITY](../docs/security/SECURITY.md); [ADR-0005](../docs/decisions/ADR-0005-runtime-supervision-and-packaging.md). Dependencies: completed T01–T07 and final OPERATIONS/contracts.
+Basis: [PRODUCT_SPEC](../docs/requirements/PRODUCT_SPEC.md), REQ-014/017/020/023–026/032; [DATA_MODEL](../docs/architecture/DATA_MODEL.md); [SECURITY](../docs/security/SECURITY.md); [ADR-0005](../docs/decisions/ADR-0005-runtime-supervision-and-packaging.md). Local preparation follows T07's local checks. Full handoff acceptance also requires the joint Telegram E2E, the shared T01c/T07 benchmark, native Linux verification, and final OPERATIONS/contracts.
 
 ## Platform Boundaries and Dependencies
 
@@ -39,6 +39,6 @@ Basis: [PRODUCT_SPEC](../docs/requirements/PRODUCT_SPEC.md), REQ-014/017/020/023
 
 ## Completion Conditions and Exclusions
 
-Platforms and T07 criteria are defined. Acceptance requires a native Linux test host with an NVIDIA GPU and authorized access; this is a future T08 check. If such an environment is not yet available, Linux remains unchecked and T08 is incomplete. The customer's specific server is not required to begin development. External delivery of the package and deployment are agreed separately; a package prepared locally does not mean it was externally sent.
+Platforms and T07 criteria are defined. Local packaging and available platform checks may proceed, but T08 is not complete until the final Telegram E2E and shared benchmark pass and a native Linux test host with an NVIDIA GPU is verified. If that environment is unavailable, Linux remains unchecked and T08 is incomplete. The customer's specific server is not required to begin development. External delivery of the package and deployment are agreed separately; a package prepared locally does not mean it was externally sent.
 
 Excluded: buying/creating a server, external deployment, granting permissions, uploading secrets, SLA, multiple bot instances, and changing the model at the implementer's discretion. Specific external actions are performed only with separate user authorization.

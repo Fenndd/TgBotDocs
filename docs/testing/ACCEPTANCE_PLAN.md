@@ -1,10 +1,10 @@
 # Acceptance Matrix and Experiment
 
-Status: numerical criteria accepted by the user (S-09-A2); procedural details prepared for implementation and revised on 2026-09-27 after the independent review (sealed benchmark, calibration on the tuning set, delivery paths, statistical reporting). Product testing is not performed in this session.
+Status: numerical criteria accepted by the user (S-09-A2); procedural details prepared for implementation and revised on 2026-09-28 to define the deferred shared T01c/T07 run. Product-wide quality acceptance remains pending; T01b calibration is complete.
 
 ## Why Several Stages
 
-T01 checks the selected model on the current PC before integration in three stages ([T01](../../specs/T01-recognition-baseline.md)): runtime feasibility, calibration of the recognition core on the tuning set, and one run of the sealed benchmark with a frozen configuration. T07 checks completed user scenarios and repeats the quality check after integration. A positive T01 result does not replace checks for access, deletion, the database, and Telegram.
+T01a verifies runtime feasibility and T01b calibrates and freezes the recognition core before integration ([T01](../../specs/T01-recognition-baseline.md)). T02–T08 may proceed after T01b freeze; this does not accept recognition quality. Defer benchmark preparation until the complete product is available through Telegram and the final real-Telegram E2E can be done with the developer. One sealed integrated 70-case run then satisfies both T01c recognition-quality acceptance and T07 integrated quality acceptance; do not run a separate core-only benchmark first. T07's local functional, isolation, cleanup, and resilience checks may proceed beforehand, but they do not complete acceptance. These quality checks do not replace checks for access, deletion, the database, and Telegram.
 
 ## Accepted Benchmark Set
 
@@ -22,7 +22,7 @@ Before a benchmark run, versions, parameters, prompts, thresholds, and the set m
 
 ## Delivery Paths
 
-Telegram delivers a photo as a server-resized JPEG, at most 1,280 or 2,560 px on the longer side, and keeps the original only for files. Every case records its delivery path: photo, image file, or PDF. The readable set includes both image paths, and at least half of the difficult photographs use the photo path, because that is the default way to "just send a picture" (REQ-003). T01 reproduces the photo path by sending the image through a Telegram test chat and saving the largest size; T07 uses real delivery through the bot.
+Telegram delivers a photo as a server-resized JPEG, at most 1,280 or 2,560 px on the longer side, and keeps the original only for files. Every case records its delivery path: photo, image file, or PDF. The readable set includes both image paths, and at least half of the difficult photographs use the photo path, because that is the default way to "just send a picture" (REQ-003). The deferred T01c/T07 integrated run records each delivery path and uses real delivery through the completed bot. Do not collect or seal benchmark cases through a separate preliminary Telegram test before the complete product is available.
 
 ## Data and Ground Truth
 

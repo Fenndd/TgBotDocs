@@ -4,20 +4,20 @@ Updated: 2026-09-28.
 
 ## Current Stage
 
-**T01b is blocked on the developer's human review; everything automatable before it is done.** The recognition core, calibration runner with policy replay, freeze step, tuning-set canonicalization, human-review form and apply tools, and the T01c benchmark generator/ingest/seal tooling are implemented, independently reviewed, and committed on `main`. Nothing is calibrated or frozen; no benchmark ran. T02 is prohibited until T01c passes. The exact procedure and commands are in [T01_PROCEDURE](docs/testing/T01_PROCEDURE.md).
+**T01b is calibrated and frozen; T02 implementation is active.** The developer's 22-case reviewed manifest was calibrated successfully. `runner freeze --auto` selected point 127 and wrote `C:\Users\nikit\TgBotDocsData\dev\frozen\frozen-t01b.json` (SHA-256 `dd1d01a0e8ff878a60b7b4bf61b6bcb20939cd5bd5695bed4eaa79a55ea633f6`). See [T01b calibration report](docs/testing/T01B_CALIBRATION_REPORT.md). Under the developer's 2026-09-28 decision (S-14), T01c preparation and the sealed run are deferred until the complete product is available in Telegram; T02 proceeds after T01b freeze. The benchmark remains mandatory and **recognition quality is not accepted**. Real-Telegram E2E and native Linux verification have not been performed.
 
-## Stop Point (2026-09-28, usage limit)
+## Stop Point (2026-09-28, active continuation)
 
 - Done: the developer (Nikita) reviewed the tuning set at 01:41; `review-apply` wrote `C:\Users\nikit\TgBotDocsData\corpora\t01b-tuning-review-v3\reviewed-manifest.json` (sha256 `022fd0b2…`): 22 verified, tune-17/tune-22/tune-23 rejected and excluded, no calibration eligibility blockers.
-- In progress when the session stopped: `runner run --mode calibration` on that manifest, writing `C:\Users\nikit\TgBotDocsData\dev\measurements\t01b-calibration.json`. If the file is missing or the run failed, rerun that command (T01_PROCEDURE stage 3).
-- Next assistant step: `runner freeze --auto --calibration <that report> --output C:\Users\nikit\TgBotDocsData\dev\frozen\frozen-t01b.json`, then write the calibration report in `docs/testing/`. Next developer step: benchmark captures (item 3 below).
+- Done: the completed calibration report at `C:\Users\nikit\TgBotDocsData\dev\measurements\t01b-calibration.json` was found and reused. Calibration eligibility passed; no environment change during collection. Automatic freeze succeeded without an override: 85 accepted values and 16 automatic profiles, zero errors; readable completeness 68/75. Current recognition identity still matches after adding application dependencies.
+- In progress: T02 application foundation, local PostgreSQL setup/migrations, per-call fair scheduler, actor/transport walking path, supervision and temporary lifecycle. Work is on `main`; inspect the current diff before resuming. Do not change frozen recognition files or dependencies without a new calibration.
 
 ## Next Steps (in order)
 
-1. **Developer:** review the 25 tuning cases in `C:\Users\nikit\TgBotDocsData\corpora\t01b-tuning-review-v3\review-form.html`, export `review-decisions.json`, then run `corpus_cli review-apply` (T01_PROCEDURE stage 2). The form binds to canonical manifest sha256 `be479b77…`; regenerate the form if the manifest is ever regenerated.
-2. **Assistant:** `runner run --mode calibration` on the reviewed manifest, then `runner freeze --auto`; write the calibration report (risk–coverage curves, frozen point, per-page times) into `docs/testing/`. If no zero-error point exists, follow ADR-0004's remediation order.
-3. **Developer:** benchmark captures from `C:\Users\nikit\TgBotDocsData\corpora\t01c-benchmark-v1` (plan sha256 `25ca85e3…`): print `printable-originals.pdf`, photograph the 20 difficult cases, send the listed files through Telegram as photos in the listed quality (standard or HD), and place files per `capture-instructions.html`; then review all 70 cases after ingest (see [README-benchmark](tools/t01/README-benchmark.md)).
-4. **Assistant:** ingest, apply the review, seal against the frozen configuration, run the benchmark once, and write the T01c report; on pass, start T02.
+1. **Assistant:** implement and verify T02, then T03–T08 in order with logical local commits. Use controlled Telegram substitutes; do not send real Telegram messages, push, deploy, or change external resources.
+2. **Assistant:** independently review the whole product, fix confirmed findings, rerun affected checks, and provide exact local token/password configuration and launch instructions.
+3. **Developer and assistant together:** configure the real bot and perform the final Telegram E2E. Real Telegram checks remain pending until then.
+4. **Deferred required acceptance:** prepare, independently review, seal, and run T01c once against the frozen configuration when the complete product is available in Telegram; follow [T01_PROCEDURE](docs/testing/T01_PROCEDURE.md). Do not claim quality acceptance before it passes. Native Linux x86-64/NVIDIA verification is not performed on this Windows PC.
 
 ## Continuing in Codex
 

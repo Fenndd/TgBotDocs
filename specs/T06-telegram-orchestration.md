@@ -42,6 +42,6 @@ Basis: [PRODUCT_SPEC](../docs/requirements/PRODUCT_SPEC.md), REQ-001/003–010/0
 
 ## Completion Conditions and Exclusions
 
-Admission, queue, delivery timeout, activity, and logout policies are defined in STATE_MACHINE, OPERATIONS, and USER_FLOWS. Scenarios receive actual automated/manual checks, including a Telegram test; there are currently no successful product checks.
+Admission, queue, delivery timeout, activity, and logout policies are defined in STATE_MACHINE, OPERATIONS, and USER_FLOWS. Run local scenarios with controlled Telegram substitutes during development. Defer the final real-Telegram E2E until the complete product is available and the developer can participate; that check is not complete before then.
 
 Excluded: groups, webhook, multiple instances, durable document queue, background recovery of an old upload, broadcasts, or external actions based on recognized content.

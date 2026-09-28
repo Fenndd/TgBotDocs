@@ -1,6 +1,6 @@
 # T02 — Application Foundation and Local Execution
 
-Status: specification ready; execution after T01c passes. Revised on 2026-09-27 after the independent review: walking skeleton first, runtime supervision, scheduler, and toolchain. The environment and dependencies are not created in the planning session.
+Status: implementation active after the T01b freeze. T01b was calibrated and frozen on 2026-09-28; see the [calibration report](../docs/testing/T01B_CALIBRATION_REPORT.md). The T01c benchmark remains deferred and required; the freeze does not accept recognition quality.
 
 ## Goal and Basis
 
@@ -25,7 +25,7 @@ This composition is not proof of compatibility or an existing dependency lock. I
 
 ## Scope and Dependencies
 
-- [T01](T01-recognition-baseline.md) has passed with a frozen recognition configuration. The foundation does not declare the model functional in advance.
+- [T01b](T01-recognition-baseline.md) has been reviewed, calibrated, and frozen. This permits the foundation work but does not declare recognition quality accepted. T01c is deferred acceptance, not an implementation dependency for T02–T08.
 - The foundation follows [USER_FLOWS](../docs/requirements/USER_FLOWS.md), STATE_MACHINE, CONTRACTS, and OPERATIONS. Mechanisms and checks using controlled substitutes are created here; full user scenarios are connected in T03–T06.
 - Standard Bot API; accepted download limit of 20 MB per file. There is no fixed page or file cap; admission control follows ED-002.
 - Settings/profiles and necessary access information are persistent. Originals, OCR, and results are temporary; they are not stored in PostgreSQL, logs, or backup.
@@ -46,7 +46,7 @@ This composition is not proof of compatibility or an existing dependency lock. I
 ## Checks and Completion Criteria
 
 - Actual installation/launch/migration/check commands have been performed; do not record successful results before that.
-- The walking skeleton runs end to end on the development PC with a real Telegram test bot and the real runtime.
+- The walking skeleton runs end to end on the development PC with a controlled Telegram substitute and the real runtime. The final real-Telegram E2E is performed jointly with the developer when the complete product is ready.
 - Clean local launch and relaunch after migrations; expected errors for missing parameters/unavailable dependencies.
 - Two jobs do not create two concurrent GPU calls; an error in one job does not stop later jobs. Cancelling a queued job does not run it later. A cancelled streaming call releases the slot, and a hung call leads to a runtime restart.
 - Killing the bot process leaves no running children; the next start terminates recorded leftovers and cleans the temporary directory before polling, also when the database/model is unavailable.
