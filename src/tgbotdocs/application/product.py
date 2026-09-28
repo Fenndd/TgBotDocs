@@ -39,15 +39,25 @@ class ProductApplication:
 
     def __init__(self, config, transport, store, compiler, *, documents=None, clock=time.monotonic):
         self.config, self.transport, self.store, self.clock = config, transport, store, clock
-        self.started_at = datetime.now(timezone.utc)
+        # Telegram message dates have whole seconds; a message sent in the start
+        # second is not treated as stale (ED-005).
+        self.started_at = datetime.now(timezone.utc).replace(microsecond=0)
         self.guard = AccessGuard(config.password, clock=clock)
         self.sessions, self.actors, self.tasks = {}, {}, set()
         self.groups = {}
         self.closing = False
-        self.documents = documents
         self.settings = SettingsFlow(store, compiler,
             PreviewService(store, ttl_s=config.inactivity_s, clock=clock), transport,
             self.submit, ttl_s=config.inactivity_s, clock=clock)
+        self.documents = None
+        if documents is not None:
+            self.attach(documents)
+
+    def attach(self, documents):
+        """Route document input to the job flow and share the Settings overlap rule."""
+        self.documents = documents
+        documents.settings_waiting = self.settings.waiting
+        documents.alert = self.alert
 
     def session(self, owner):
         return self.sessions.setdefault(owner, Session())
@@ -95,6 +105,12 @@ class ProductApplication:
                 self.alert("password_message_deletion_failed")
         self.task(remove())
 
+    def _stale_button(self, data):
+        prefix, _, rest = data.partition(":")
+        nonce = rest.partition(":")[0]
+        current = {"s": self.settings.nonce, "j": getattr(self.documents, "nonce", None)}.get(prefix)
+        return prefix in ("s", "j") and nonce != current
+
     def job_active(self, owner):
         return self.documents is not None and self.documents.active(owner)
 
@@ -126,7 +142,16 @@ class ProductApplication:
             self.guard.prune()
             self.settings.expire(event.owner)
             if self.documents is not None:
+                if not self.settings.waiting(event.owner):
+                    self.documents.settings_closed(event.owner)
                 await self.documents.handle(event)
+            return
+        if isinstance(event.payload, ButtonClick) and self._stale_button(event.payload.data):
+            # A button from a previous process: Session expired, one restart notice.
+            self.task(self.transport.answer_callback(event.payload.query_id, "Session expired"))
+            if not session.restart_notified:
+                session.restart_notified = True
+                self.say(event.owner, "The bot restarted. Send /start to sign in and resend your document.")
             return
         if event.kind.startswith("document_"):
             if self.documents is not None:

@@ -325,7 +325,9 @@ class InstructionCompiler:
         definitions["_DraftReply"]["properties"]["drafts"] = exact_array(shapes)
         return schema
 
-    async def compile(self, owner, instruction, *, current=(), request_id=None, remaining_budget_s=300):
+    async def compile(self, owner, instruction, *, current=(), request_id=None, remaining_budget_s=300,
+                      charged=None):
+        """``charged(seconds)`` receives the processing time, without queue wait, even on failure."""
         _owner(owner)
         if not isinstance(instruction, str) or not instruction.strip():
             raise ValueError("instruction must be nonempty text")
@@ -393,6 +395,8 @@ class InstructionCompiler:
         finally:
             # Caller cancellation is drained by the scheduler before this metadata can be released.
             self.scheduler.forget(identity)
+            if charged is not None:
+                charged(budget.used)
 
     @staticmethod
     def _parse_calculation(text):

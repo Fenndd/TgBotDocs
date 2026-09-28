@@ -1,5 +1,6 @@
 """Telegram adapter. Handlers enqueue events; transport owns network calls."""
 
+import asyncio
 from dataclasses import dataclass
 
 from aiogram import Bot, Dispatcher, Router
@@ -16,11 +17,49 @@ class Upload:
     media_group_id: str | None = None
 
 
+class SendSkipped(Exception):
+    """The message was withdrawn before its request started; nothing was sent."""
+
+
+class OrderedTransport:
+    """Per-chat FIFO: a user's messages arrive in the order the flows issued them.
+
+    Flows send from short tasks created in transition order; asyncio starts them in
+    that order and ``asyncio.Lock`` wakes waiters first-in, first-out. ``guard`` is
+    checked when the message's turn comes, so a message queued behind another one
+    is withdrawn, not sent, after Cancel; only a request already started may finish.
+    """
+
+    def __init__(self, transport):
+        self.transport = transport
+        self._chats = {}
+
+    def __getattr__(self, name):
+        return getattr(self.transport, name)
+
+    async def send(self, owner, text, *, guard=None, **kwargs):
+        entry = self._chats.get(owner)
+        if entry is None:
+            entry = self._chats[owner] = [asyncio.Lock(), 0]
+        entry[1] += 1
+        try:
+            async with entry[0]:
+                if guard is not None and not guard():
+                    raise SendSkipped
+                return await self.transport.send(owner, text, **kwargs)
+        finally:
+            entry[1] -= 1
+            if not entry[1]:
+                self._chats.pop(owner, None)
+
+
 class TelegramTransport:
     def __init__(self, bot: Bot):
         self.bot = bot
 
-    async def send(self, owner, text, *, entities=(), reply_markup=None):
+    async def send(self, owner, text, *, entities=(), reply_markup=None, guard=None):
+        if guard is not None and not guard():
+            raise SendSkipped
         return await self.bot.send_message(owner, text, entities=list(entities), parse_mode=None,
                                            link_preview_options=LinkPreviewOptions(is_disabled=True),
                                            reply_markup=reply_markup)

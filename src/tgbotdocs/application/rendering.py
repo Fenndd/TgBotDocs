@@ -19,16 +19,35 @@ class MessagePart:
     entities: tuple[MessageEntity, ...] = ()
 
 
+LABELS = {"missing": "Missing", "unreadable": "Unreadable", "ambiguous": "Ambiguous",
+          "invalid": "Unreadable (did not pass the format check)"}
+
+
 def _value(field):
     if field.status == "extracted":
         value = field.accepted_value
         return ("true" if value else "false") if isinstance(value, bool) else str(value), True
-    return {"missing": "Missing", "unreadable": "Unreadable", "ambiguous": "Ambiguous",
-            "invalid": "Unreadable (did not pass the format check)"}[field.status], False
+    return LABELS[field.status], False
 
 
-def render_result(profile, result, *, compressed=False):
-    """Split at scalar/row boundaries, never truncate or reveal invalid candidates."""
+def _list_status(listing):
+    """An unresolved list shows its reason with the REQ-022 labels (CONTRACTS)."""
+    if listing.status == "unresolved":
+        return LABELS[listing.reason]
+    return listing.status.title()
+
+
+def _absent(result):
+    """Every requested item is justified missing: nothing requested is in the document."""
+    return all(field.status == "missing" for field in result.fields) and all(
+        listing.status == "unresolved" and listing.reason == "missing" for listing in result.lists)
+
+
+def render_result(profile, result, *, compressed=False, note=None):
+    """Split at scalar/row boundaries, never truncate or reveal invalid candidates.
+
+    ``note`` is an application line such as the profile used; never document text.
+    """
     units = []
 
     def unit(label, value, accepted):
@@ -43,7 +62,7 @@ def render_result(profile, result, *, compressed=False):
         units.append(unit(definitions[field.field_id].label, *_value(field)))
     for listing in result.lists:
         definition = definitions[listing.field_id]
-        units.append(MessagePart(f"{definition.label}: {listing.status.title()}"))
+        units.append(MessagePart(f"{definition.label}: {_list_status(listing)}"))
         columns = {x.id: x for x in definition.columns}
         for index, row in enumerate(listing.rows, 1):
             text, entities = f"Row {index}\n", []
@@ -57,7 +76,10 @@ def render_result(profile, result, *, compressed=False):
             units.append(MessagePart(text.rstrip(), tuple(entities)))
     title = "Result: " + result.outcome.title()
     if result.outcome == "failed":
-        title += "\nNone of the requested data could be reliably extracted."
+        title += ("\nNone of the requested data is present in the document." if _absent(result)
+                  else "\nNone of the requested data could be reliably extracted.")
+    if note:
+        title += "\n" + note
     if compressed and result.outcome != "complete":
         units.append(MessagePart("For better quality, resend the document as a file."))
     chunks, text, entities = [], title, []
