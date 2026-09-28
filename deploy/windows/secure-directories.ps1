@@ -28,6 +28,10 @@ if ($Apply -and -not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]
 try {
     $botSid = (New-Object Security.Principal.NTAccount($BotAccount)).Translate([Security.Principal.SecurityIdentifier])
 } catch { throw 'BotAccount does not resolve to a Windows account.' }
+$botUser = @(Get-CimInstance Win32_UserAccount -Filter ("SID='" + $botSid.Value + "' AND LocalAccount=TRUE"))
+if ($botUser.Count -ne 1 -or $botUser[0].Disabled) {
+    throw 'BotAccount must identify one enabled local user, not a group or a domain principal.'
+}
 if ($Apply -and $botSid.Value -eq $identity.User.Value) {
     throw 'Use a separate dedicated bot account; the installing account must remain an administrator.'
 }

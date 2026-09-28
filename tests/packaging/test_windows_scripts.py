@@ -80,3 +80,15 @@ def test_dry_run_refuses_mutating_startup_check(tmp_path):
     result = invoke("install-bot-task.ps1", "-ConfigPath", config, "-UserId", account(), "-RunCheck")
     assert result.returncode != 0 and "requires -Apply" in result.stderr
     assert not (tmp_path / "logs").exists() and not (tmp_path / "temporary").exists()
+
+
+@pytest.mark.parametrize("sid", ["S-1-5-32-545", "S-1-5-11"])
+def test_acl_plan_refuses_broad_group_principals(tmp_path, sid):
+    args = roots(tmp_path)
+    name = subprocess.check_output([str(POWERSHELL), "-NoProfile", "-Command",
+                                    "([Security.Principal.SecurityIdentifier]'" + sid + "').Translate("
+                                    "[Security.Principal.NTAccount]).Value"],
+                                   text=True, env=native_environment()).strip()
+    result = invoke("secure-directories.ps1", *args, "-BotAccount", name)
+    assert result.returncode != 0 and "enabled local user" in result.stderr
+    assert "Preflight entries:" not in result.stdout
