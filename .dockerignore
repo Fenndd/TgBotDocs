@@ -1,0 +1,30 @@
+# Build context for deploy/linux/Dockerfile. Allowlist: the image needs only the
+# locked project definition, the application source, and the migrations.
+*
+!pyproject.toml
+!uv.lock
+!.python-version
+!alembic.ini
+!src/
+!migrations/
+
+# Never send these, even if they appear inside an allowed directory:
+# environments and caches,
+**/.venv
+**/.venv-*
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.ruff_cache
+**/.hypothesis
+**/*.egg-info
+# VCS metadata, assistant worktrees, and local settings,
+**/.git
+**/.claude
+# configuration files with secrets,
+**/.env
+**/.env.*
+**/*.env
+# and test evidence, corpora, or model files.
+**/evidence
+**/*.gguf
