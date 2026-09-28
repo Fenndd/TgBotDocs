@@ -13,6 +13,7 @@ discarded. ``on_ready`` replaces recognition only in collection-level tests.
 import asyncio
 from dataclasses import dataclass, field
 import itertools
+import logging
 import secrets
 import time
 from uuid import uuid4
@@ -64,6 +65,7 @@ MATCHING = {
     "mixed": "The pages seem to belong to different documents. Send each document separately.",
     "not_document": "This does not look like a document. Nothing was extracted.",
 }
+EVENTS = logging.getLogger("tgbotdocs.events")
 WAITING = ("awaiting_choice", "awaiting_instruction", "awaiting_confirmation")
 INSTRUCTION = "Describe the document type and exactly which fields or lists to extract."
 
@@ -273,9 +275,12 @@ class DocumentsFlow:
         self._request(job, "seal", lambda: self.intake.seal(job.submission,
             remaining_budget_s=self.config.processing_s - job.used_s))
 
-    def _finish(self, job, *, reason=None):
+    def _finish(self, job, *, reason=None, code="cancelled"):
         if job.state == "finishing":
             return
+        # Technical event only: fixed code, random job ID, page count and charged time.
+        pages = len(job.ready.document.pages) if job.ready is not None and hasattr(job.ready, "document") else 0
+        EVENTS.info("job_finished %s %s pages=%d charged_s=%.1f", job.submission.job_id, code, pages, job.used_s)
         if reason:
             self._say(job.submission.owner, reason)
         self.intake.cancel_now(job.submission)
@@ -383,7 +388,7 @@ class DocumentsFlow:
     def _recognize(self, job):
         remaining = self._remaining(job)
         if remaining <= 0:
-            self._finish(job, reason=TIME_LIMIT)
+            self._finish(job, reason=TIME_LIMIT, code="processing_budget_exhausted")
             return
         job.phase += 1
         job.state, job.phase_started, job.activity_at = "queued", False, self.clock()
@@ -417,7 +422,7 @@ class DocumentsFlow:
         if job.selected is None:
             job.snapshots = snapshots
         if outcome.error:
-            self._finish(job, reason=_failure(outcome.error))
+            self._finish(job, reason=_failure(outcome.error), code=outcome.error)
             return
         result = outcome.result
         status = result.matching.status
@@ -432,14 +437,14 @@ class DocumentsFlow:
             reason = MATCHING[status]
             if status == "unreadable" and job.compressed:
                 reason += " A photo is recompressed by Telegram; sending the image as a file keeps its quality."
-            self._finish(job, reason=reason)
+            self._finish(job, reason=reason, code=status)
         else:
-            self._finish(job, reason=TECHNICAL)
+            self._finish(job, reason=TECHNICAL, code="unexpected_matching_status")
 
     def _compile(self, job, text):
         remaining = self._remaining(job)
         if remaining <= 0:
-            self._finish(job, reason=TIME_LIMIT)
+            self._finish(job, reason=TIME_LIMIT, code="processing_budget_exhausted")
             return
         # Clarification answers extend the instruction; they never replace earlier requests.
         job.instruction = job.instruction + "\n" + text if job.instruction else text
@@ -455,7 +460,7 @@ class DocumentsFlow:
     def _compiled(self, job, result, code):
         if code:
             if self._remaining(job) <= 0:
-                self._finish(job, reason=TIME_LIMIT)
+                self._finish(job, reason=TIME_LIMIT, code="processing_budget_exhausted")
             else:
                 self._instruct(job, "The instruction could not be compiled. Please simplify it and try again.")
             return
@@ -497,7 +502,7 @@ class DocumentsFlow:
             parts = render_result(profile, recognition, compressed=job.compressed, note=note)
         except RenderingError:
             self._finish(job, reason="A value is longer than one Telegram message, so the result could not be "
-                                     "sent. Nothing was truncated.")
+                                     "sent. Nothing was truncated.", code="result_too_long")
             return
         job.state, job.delivery_started = "delivering", True
         owner, generation = job.submission.owner, job.generation
@@ -511,11 +516,12 @@ class DocumentsFlow:
 
     def _delivered(self, job, outcome):
         if outcome in (COMPLETE, BLOCKED, CANCELLED):
-            self._finish(job)
+            self._finish(job, code="delivered_" + outcome)
             return
         if self.alert is not None:
             self.alert("delivery_failed", job.submission.job_id)
-        self._finish(job, reason="The result could not be delivered completely. Please resend the document.")
+        self._finish(job, reason="The result could not be delivered completely. Please resend the document.",
+                     code="delivered_" + outcome)
 
     def _restart_album(self, job, event):
         job.replay.append(event)
@@ -558,12 +564,12 @@ class DocumentsFlow:
                 self._received(job, event, value, code)
             elif kind == "seal":
                 if code:
-                    self._finish(job, reason=MESSAGES.get(code, MESSAGES["temporarily_unavailable"]))
+                    self._finish(job, reason=MESSAGES.get(code, MESSAGES["temporarily_unavailable"]), code=code)
                 else:
                     self._ready(job, value)
             elif kind == "recognized" and job.state == "queued":
                 if code:
-                    self._finish(job, reason=TECHNICAL)
+                    self._finish(job, reason=TECHNICAL, code=code)
                 else:
                     self._recognized(job, *value)
             elif kind == "compiled" and job.state == "compiling":
@@ -580,7 +586,7 @@ class DocumentsFlow:
             if job.submission.mode == "several" and code != "storage_limit":
                 self._say(event.owner, reason + " Other accepted pages are still collected.")
             else:
-                self._finish(job, reason=reason)
+                self._finish(job, reason=reason, code=code)
                 return
         else:
             job.accepted[value.file_key] = value
@@ -603,12 +609,13 @@ class DocumentsFlow:
         if job.state in ("collecting", "restarting"):
             elapsed = now - (job.submission.admission_time if job.submission.mode == "album" else job.activity_at)
             if elapsed >= self.config.inactivity_s:
-                self._finish(job, reason="The document collection expired. Please resend it.")
+                self._finish(job, reason="The document collection expired. Please resend it.", code="expired")
             elif (job.submission.mode == "album" or job.late_album_quiet) and now - job.last_arrival >= self.config.album_quiet_s:
                 self._seal(job)
         elif job.state in WAITING and job.deferred is None and job.activity_at is not None and (
                 now - job.activity_at >= self.config.inactivity_s):
-            self._finish(job, reason="The document waited too long for your answer and expired. Please resend it.")
+            self._finish(job, reason="The document waited too long for your answer and expired. Please resend it.",
+                         code="expired")
 
     def _button(self, job, event):
         action = job.buttons.get(event.payload.data) if job else None

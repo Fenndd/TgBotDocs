@@ -285,3 +285,22 @@ async def test_two_users_cannot_act_on_each_others_jobs_previews_or_results():
         assert all(p.owner == "2" for p in h.store.rows.values())
     finally:
         await h.close()
+
+
+async def test_job_outcomes_are_logged_as_content_free_technical_events(caplog):
+    h = Harness()
+    try:
+        card = profile(1)
+        h.store.rows[card.id] = card
+        await h.sign_in()
+        with caplog.at_level("INFO", logger="tgbotdocs.events"):
+            h.recognition.results.append(recognized(card, "SECRET-VALUE-42"))
+            await h.file("scan", message_id=1)
+            h.recognition.results.append(matching("unreadable"))
+            await h.file("blurred", message_id=2)
+        lines = [r.getMessage() for r in caplog.records if r.name == "tgbotdocs.events"]
+        assert any(" delivered_complete pages=1 charged_s=10.0" in line for line in lines)
+        assert any(" unreadable pages=1 " in line for line in lines)
+        assert all("SECRET" not in line and "Card" not in line and "scan" not in line for line in lines)
+    finally:
+        await h.close()
