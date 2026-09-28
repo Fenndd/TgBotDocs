@@ -13,6 +13,11 @@ dependencies = [
   "pypdfium2==5.13.0",
   "pydantic==2.13.5",
   "psutil==7.2.2",
+  "aiogram>=3,<4",
+  "sqlalchemy>=2,<3",
+  "psycopg[binary]>=3,<4",
+  "alembic>=1,<2",
+  "python-dotenv>=1,<2",
 ]
 
 [project.scripts]
