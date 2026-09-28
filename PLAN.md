@@ -1,6 +1,6 @@
 # Development Plan
 
-Status: implementation authorized and active; updated 2026-09-28. T01b is calibrated and frozen on 22 reviewed cases; T02's local foundation and T03's local implementation checks are verified, and T04 is active. The application/storage suite passed with actual PostgreSQL (120 tests in 17.20 seconds). See the [T03 progress report](docs/testing/T03_PROGRESS_REPORT.md), [T02 foundation report](docs/testing/T02_FOUNDATION_REPORT.md), and [STATUS](STATUS.md) for verified behavior and remaining checks.
+Status: implementation authorized; paused at the usage checkpoint; updated 2026-09-28. T01b is calibrated and frozen on 22 reviewed cases; T02's local foundation and T03's local implementation checks are verified, and T04 is active. The application/storage suite passed with actual PostgreSQL (120 tests in 17.20 seconds). See the [T03 progress report](docs/testing/T03_PROGRESS_REPORT.md), [T02 foundation report](docs/testing/T02_FOUNDATION_REPORT.md), and [STATUS](STATUS.md) for verified behavior and remaining checks.
 
 ## Current Execution Sequence
 
