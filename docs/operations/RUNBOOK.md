@@ -1,14 +1,14 @@
 # Operations Runbook
 
-Status: T08 operator documentation, written on 2026-09-28 from the application code on `main` at `61861c2`. The design basis is [OPERATIONS](OPERATIONS.md), [STATE_MACHINE](../architecture/STATE_MACHINE.md), [ADR-0005](../decisions/ADR-0005-runtime-supervision-and-packaging.md) and [SECURITY](../security/SECURITY.md). Every configuration key is described in [CONFIGURATION](CONFIGURATION.md).
+Status: T08 operator documentation, updated on 2026-09-28 against the current local implementation and delivery configuration. The design basis is [OPERATIONS](OPERATIONS.md), [STATE_MACHINE](../architecture/STATE_MACHINE.md), [ADR-0005](../decisions/ADR-0005-runtime-supervision-and-packaging.md) and [SECURITY](../security/SECURITY.md). Every configuration key is described in [CONFIGURATION](CONFIGURATION.md).
 
-What has been verified, and where: the service behavior is covered by the automated suite and by one local product run against the real PostgreSQL and CUDA runtime with a controlled Bot API session ([T06 report](../testing/T06_PROGRESS_REPORT.md)). **Not yet verified:** real Telegram, the Windows service wrapper, the Linux container on a native Linux/NVIDIA host, backup and restore, and the procedures in this runbook as a whole. Platform installation steps are in [INSTALL_WINDOWS](INSTALL_WINDOWS.md) and [INSTALL_LINUX](INSTALL_LINUX.md). A platform counts as working only after its own recorded run.
+What has been verified, and where: local checks and the current suite are recorded in [T08 local report](../testing/T08_LOCAL_REPORT.md); the product has also run with actual PostgreSQL and the CUDA runtime against a controlled Bot API session ([T06 report](../testing/T06_PROGRESS_REPORT.md)). These checks do not establish real-Telegram behavior or recognition quality. **Not yet verified:** the joint real-Telegram end-to-end test, the single required sealed 70-case T01c/T07 quality benchmark, the Windows scheduled-task installation and unattended restart behavior, the Linux container on a native Linux/NVIDIA host, native Linux backup/restore, and this runbook's procedures as a whole. Windows backup/fresh-target restore was checked against real PostgreSQL; see [BACKUP_RESTORE](BACKUP_RESTORE.md). Platform installation steps are in [INSTALL_WINDOWS](INSTALL_WINDOWS.md) and [INSTALL_LINUX](INSTALL_LINUX.md). A platform counts as working only after its own recorded run.
 
 ## Processes
 
 | Process | Owner | Notes |
 | --- | --- | --- |
-| Bot (`python -m tgbotdocs run --config <file>`) | Service manager: a Windows service or scheduled task, or the Compose `app` service on Linux | One instance per data root. Long polling for `message` and `callback_query` updates. There is no HTTP server and no health endpoint |
+| Bot (`python -m tgbotdocs run --config <file>`) | Windows Task Scheduler (direct Python invocation) or the Compose `app` service on Linux | One instance per data root. Long polling for `message` and `callback_query` updates. There is no HTTP server and no health endpoint |
 | `llama-server` (pinned llama.cpp b11221) | Started and supervised by the bot | Listens on `127.0.0.1:RUNTIME_PORT` with a per-start API key. One slot and one active request. Its output is discarded (`stdout`/`stderr` go to the null device) |
 | File-preparation workers | Started by the bot per file | Short-lived. They are terminated on timeout |
 | PostgreSQL | Service manager (Windows service or the Compose `db` service) | Holds only users and profiles. Not supervised by the bot |
@@ -16,6 +16,13 @@ What has been verified, and where: the service behavior is covered by the automa
 Children end with the bot: a Job Object with kill-on-close on Windows; a parent-death signal plus the container init on Linux. The bot also records its children's PID, start time and executable in `TEMPORARY_ROOT/.tgbotdocs-processes.json`, so that the next startup can terminate leftovers of a hard crash. A recycled PID never matches and is never terminated.
 
 **Single instance.** A kernel lock on `<parent of TEMPORARY_ROOT>/.tgbotdocs-instance.lock` prevents a second bot on the same data. A second start fails with `application_already_running`. A crash releases the lock automatically. Do not delete the lock file to "unlock" the bot; if the lock is held, a bot is running.
+
+## Network and Access
+
+- At runtime, the bot's only remote application service is the Telegram Bot API over outbound HTTPS, for long polling, file transfer and message delivery. There is no inbound listener, webhook, published application port or application health endpoint. `check` makes no Telegram request. Software/model downloads during installation or maintenance are separate from bot runtime traffic.
+- On Linux, Compose publishes no ports. The app has outbound access for Telegram and joins an internal `backend` network; PostgreSQL is reachable only as `db:5432` on that internal network and is not published to the host. The Compose `egress` network provides outbound connectivity; it is not a hostname allowlist.
+- On Windows, keep PostgreSQL on loopback. The repository's local development cluster uses `127.0.0.1:55432`; a delivery installation must use the actual configured local port. Do not expose PostgreSQL beyond the host.
+- `llama-server` listens only on `127.0.0.1:RUNTIME_PORT` (default `18081`) and uses a per-start API key. Do not publish that port. Document prompts cannot configure a remote model endpoint; the product has no cloud-recognition fallback.
 
 ## Startup Order
 
@@ -27,40 +34,39 @@ Children end with the bot: a Job Object with kill-on-close on Windows; a parent-
 6. Start the minute cleanup sweep and child supervision.
 7. Run PostgreSQL migrations and a health check.
 8. Verify the runtime artifact hashes, then start `llama-server` and wait for its health check.
-9. Start long polling. The alert `startup_completed` is sent.
+9. For `run`, queue `startup_completed` after local resources initialize, immediately before starting long polling. This does not confirm a successful Telegram GetMe or update fetch. `check` stops after the local startup checks and sends no startup alert.
 
-If any step fails, the bot exits with a nonzero status and prints `local_application_failed: <code>` or a generic message without dependency detail. After the configuration has loaded, the bot also tries to send `startup_failed` to the operators. The service manager is expected to restart it.
+If a `run` startup fails, it exits that attempt with a nonzero status and reports the specific content-free code where available. After the configuration has loaded, `run` also tries to send `startup_failed` to configured operators. The `check` command sends no Telegram alerts and writes no application log; some initialization failures are summarized as `local_startup_failed` (see [Startup Refusals](#startup-refusals)).
 
 ## Start, Stop and Check
 
-- **Check without Telegram:** `python -m tgbotdocs check --config <file>` performs steps 1–8 and stops. It prints `local_startup_verified` on success. It needs the GPU and starts `llama-server`; do not run it next to a running bot on the same data root, because the instance lock refuses it.
-- **Start:** `python -m tgbotdocs run --config <file>`. It prints `tgbotdocs_starting` and, on a clean stop, `tgbotdocs_stopped`.
-- **Stop:** send an interrupt (Ctrl+C in a console) or stop the service. On Linux, aiogram handles SIGINT and SIGTERM. On a clean stop, the bot cancels all jobs, waits for their cleanup and sends nothing more. The platform-specific service commands are in [INSTALL_WINDOWS](INSTALL_WINDOWS.md) and [INSTALL_LINUX](INSTALL_LINUX.md).
+- **Check without Telegram:** `python -m tgbotdocs check --config <file>` performs the local startup checks and stops. It prints `local_startup_verified` on success. It needs the GPU and starts `llama-server`; do not run it next to a running bot on the same data root, because the instance lock refuses it. `check` does not accept `--restart-on-failure`.
+- **Start:** `python -m tgbotdocs run --config <file>`. For an unattended scheduled run, `python -m tgbotdocs run --restart-on-failure --config <file>` waits 60 seconds and retries an unexpected failure in the same Python process. A clean stop or cancellation exits the retry loop. It prints `tgbotdocs_starting` at startup.
+- **Stop:** send an interrupt (Ctrl+C in a console) or stop the task/container. On Linux, aiogram handles SIGINT and SIGTERM; after a clean signal-handled stop, it prints `tgbotdocs_stopped`. On Windows, Ctrl+C still runs cleanup and exits with status 0, but does not print `tgbotdocs_stopped`. On a clean stop, the bot cancels all jobs, waits for cleanup and sends nothing more. The platform-specific setup steps are in [INSTALL_WINDOWS](INSTALL_WINDOWS.md) and [INSTALL_LINUX](INSTALL_LINUX.md); unattended Windows task behavior has not yet been verified on a clean installation.
 - A **hard kill** is safe by design. The next startup terminates recorded orphans and deletes job leftovers before it accepts anything.
 
 ## Technical Log
 
 - Location: `DATA_ROOT/logs/tgbotdocs.log`, UTF-8, written only by `run` (`configure_logging` in `service.py`). `check` writes no log file.
 - Rotation: at **UTC midnight**. **7** previous files are kept (`tgbotdocs.log.YYYY-MM-DD`); older files are deleted automatically.
-- Level: application loggers `tgbotdocs.*` at INFO. The root logger and the dependency loggers (`aiogram`, `aiohttp`, `httpx`, `httpcore`, `asyncio`) are at WARNING, because request URLs contain the bot token.
+- The file handler accepts only structured `tgbotdocs.events` alerts and `job_finished` records. Dependency/root records, arbitrary messages, exception tracebacks and stack information are rejected at every level; WARNING/ERROR records can contain sensitive values too. Do not add another unfiltered persistent handler.
 - Contents: event codes such as the alert codes below, `startup_failed` and `service_failed`, with timestamps. By design, the log holds no document content, passwords, tokens, file IDs, original filenames or full updates. Do not raise dependency loggers to INFO or DEBUG in production.
-- Service manager output (stdout/stderr) additionally contains `tgbotdocs_starting`, `tgbotdocs_stopped` and `local_application_failed: <code>`.
+- Process output includes `tgbotdocs_starting` and startup failure text. `tgbotdocs_stopped` is printed only after a handled clean signal on Linux; Windows Ctrl+C does not print that line. `run --restart-on-failure` retries in-process and does not depend on a captured console-log file.
 - PostgreSQL and the service manager keep their own logs. `llama-server` output is discarded.
 
 ## Operator Alerts
 
-`OPERATOR_TELEGRAM_IDS` lists the operators. An alert is a single line `<code> <UTC ISO time>`, with ` <random job ID>` appended only for `delivery_failed`. It never contains document content or user data. Every alert is also written to the technical log. Without operators, alerts go only to the log.
+`OPERATOR_TELEGRAM_IDS` lists the operators. Telegram alerts are sent by `run`, not by `check`. An alert is a single line `<code> <UTC ISO time>`, with ` <random job ID>` appended only for `delivery_failed`. It never contains document content or user data. Alerts raised by `run` are also written to the technical log. Without operators, alerts go only to the log; `check` writes no application log.
 
-**Delivery caveat:** before long polling starts, the Telegram sender does not exist yet. Alerts raised during startup (`temporary_startup_failed`, `intake_closed`, `intake_reopened` and `temporary_ownership_failed` from the startup cleanup, and `runtime_executable_differs_from_frozen`) therefore go **only to the log**. A failed startup still reaches the operators through `startup_failed`, sent directly and best effort.
+**Delivery caveat:** before long polling starts, the Telegram sender does not exist yet. Alerts raised during startup (`temporary_startup_failed`, `intake_closed`, `intake_reopened` and `temporary_ownership_failed` from the startup cleanup) therefore go **only to the log**. A failed `run` startup still reaches operators through `startup_failed`, sent directly and best effort if configuration loaded and operators are configured. `check` sends no alerts.
 
 The table lists every code the application can emit (found by searching `src/` for `alert(`, `_alert(` and `Alerts`).
 
 | Code | Source | Meaning | Operator action |
 | --- | --- | --- | --- |
-| `startup_completed` | `application/service.py:93` | Long polling started; the bot is accepting updates | None. It confirms a (re)start. Unexpected repeats mean the service manager is restarting a crashing bot; check the log for `service_failed` |
-| `startup_failed` | `application/service.py:172-173` (log and `_notify_failure`) | Startup failed before the product was composed | Read the printed `local_application_failed: <code>` in the service output (see [Startup Refusals](#startup-refusals)). This alert is sent only if the configuration file could be loaded and operators are configured |
-| `service_failed` | `application/service.py:172-173` | The running service stopped on an unexpected error | Check the log and the service manager output. The service manager should restart the bot. Users must sign in again |
-| `runtime_executable_differs_from_frozen` | `application/bootstrap.py:104` | `RUNTIME_EXECUTABLE` override is active: the runtime is not the calibrated Windows executable. Log only | Expected on the Linux image. Recognition on that platform is unverified until ED-017 is decided. On Windows, remove the override |
+| `startup_completed` | `application/service.py:93` | Local resources initialized; long polling is about to start | None. It confirms a (re)start. Unexpected repeats mean `run --restart-on-failure` retried or the task/container restarted the bot; check for `service_failed` |
+| `startup_failed` | `application/service.py:172-173` (log and `_notify_failure`) | A `run` startup failed before the product was composed | Read the printed startup error (see [Startup Refusals](#startup-refusals)). This alert is sent only if configuration loaded and operators are configured; `check` sends none |
+| `service_failed` | `application/service.py:172-173` | A `run` attempt stopped on an unexpected error | Check the log and process output. With `--restart-on-failure`, the same process waits 60 seconds and retries; otherwise follow the configured task/container policy |
 | `temporary_startup_failed` | `application/lifecycle.py:240` | Startup cleanup of `TEMPORARY_ROOT` failed: the root is unsafe or unowned, a marker or manifest is invalid, or orphan termination failed. Startup refuses. Log only | See [Closed Intake and Failed Cleanup](#closed-intake-and-failed-cleanup). Do not delete markers |
 | `intake_closed` | `application/lifecycle.py:243`, `:429` | A job directory could not be deleted after 5 attempts with backoff. New documents are refused as temporarily unavailable for **all** users; retries continue every minute. At startup (`:243`) the bot refuses to start with `temporary_cleanup_incomplete` | Find what holds the files: an antivirus scan, a backup or indexing tool, a user shell, permissions or a failing disk. Remove the cause; do not delete files by hand. Wait for `intake_reopened` |
 | `intake_reopened` | `application/lifecycle.py:418`, `:449` | All pending deletions succeeded; intake is open again | None |
@@ -74,7 +80,7 @@ The table lists every code the application can emit (found by searching `src/` f
 
 ## Startup Refusals
 
-`run` and `check` print `local_application_failed: <code>`. The frequent codes:
+A foreground single-attempt `run` reports a specific startup code where available. `run --restart-on-failure` records fixed `startup_failed`/`service_failed` and `service_retry_scheduled` events without raw exception text; use the no-Telegram `check` command to diagnose local configuration/dependencies. `check` preserves ordinary configuration and model errors but wraps several initialization failures as `local_application_failed: local_startup_failed`; this includes temporary cleanup, invalid frozen configuration and database initialization failures. `check` sends no alerts and writes no application log, so its summary does not reveal the underlying code. The codes below are the underlying `run` codes unless marked as `check` behavior.
 
 | Code | Cause |
 | --- | --- |
@@ -89,8 +95,11 @@ The table lists every code the application can emit (found by searching `src/` f
 | `frozen_recognition_identity_mismatch_recalibrate` | The installation differs from the frozen identity ([Upgrades](#upgrading-dependencies-or-llamacpp)) |
 | `processing_budget_differs_from_frozen_configuration` | `PROCESSING_S` differs from the frozen budget |
 | `runtime_artifact_hash_mismatch`, `runtime_executable_missing` | A runtime file is missing or does not match its pinned SHA-256 |
+| `runtime_executable_differs_from_frozen_recalibrate` | The override executable's SHA-256 differs from the frozen runtime identity; startup refuses until the frozen identity is legitimately rechecked and updated |
 | `runtime_port_in_use`, `runtime_start_failed` | Another program uses `RUNTIME_PORT`, or `llama-server` exited or never became healthy |
-| `local_application_failed; check configuration and local dependencies` | Any other error, for example the database being unreachable during migrations. Details are deliberately not printed |
+| `database operation failed` | `run`: PostgreSQL was unreachable or a database operation/migration failed. `check` reports `local_startup_failed` for this initialization failure |
+| `local_startup_failed` | `check` wrapper for temporary cleanup, invalid frozen configuration, or database initialization failures; `check` does not report the underlying code |
+| `local_application_failed; check configuration and local dependencies` | `run`: another unexpected error without a more specific content-free code |
 
 ## Closed Intake and Failed Cleanup
 
@@ -122,7 +131,7 @@ In the parent directory: `.tgbotdocs-instance.lock`, and `runtime-temp/` with `.
 2. Check that the path in `.tgbotdocs-owner.json` equals the configured `TEMPORARY_ROOT`. A moved or renamed root does not match its marker.
 3. Check for links and junctions anywhere under the root, foreign files, and files locked by other programs.
 4. Restart once the cause is removed. Startup repeats the whole cleanup.
-5. An interrupted first creation of the ownership marker leaves an unmarked, non-empty root. It needs manual recovery and is not automated. As a last resort, and only after confirming that the bot is stopped and no `llama-server` or preparation worker from it is still running, the operator may remove the entire `TEMPORARY_ROOT` directory. It holds only temporary document data, which is never backed up. This procedure has **not been verified**; prefer escalating to the developer.
+5. Never use a broad recursive deletion as recovery. First confirm that the configured `TEMPORARY_ROOT` is the intended dedicated directory (normally `DATA_ROOT/temporary`), not `DATA_ROOT/models`, `logs`, `frozen`, or another directory containing persistent files. List its exact contents. Expected names alone do not prove ownership: only a valid owner marker does. If the path is misconfigured or contains any unexpected file, correct the configuration and preserve the data; do not delete the path. If isolation is necessary, stop the bot and all its children, verify the exact source and a non-existing quarantine destination, then move the dedicated temporary directory aside for review. Unknown or unmarked contents require escalation; this manual recovery has **not been verified**.
 
 ## Runtime Unavailable
 

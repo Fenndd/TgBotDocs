@@ -1,6 +1,6 @@
 # Configuration Reference
 
-Status: T08 operator reference, written on 2026-09-28 from `src/tgbotdocs/application/config.py` (`AppConfig.load`, `startup_temporary_root`) and `src/tgbotdocs/application/bootstrap.py`. [`.env.example`](../../.env.example) is the safe template. When this document and the code disagree, the code wins; report the discrepancy.
+Status: T08 operator reference, updated on 2026-09-28 from the current configuration and startup behavior. [`.env.example`](../../.env.example) is the safe template. When this document and the code disagree, the code wins; report the discrepancy.
 
 ## The Configuration File
 
@@ -8,6 +8,7 @@ The application reads one dotenv file:
 
 ```text
 python -m tgbotdocs run   --config <absolute path to the external .env>
+python -m tgbotdocs run --restart-on-failure --config <same external .env>
 python -m tgbotdocs check --config <same path>
 ```
 
@@ -15,10 +16,12 @@ python -m tgbotdocs check --config <same path>
 - The path must be **absolute** and **outside the source checkout**, the directory that contains `src/tgbotdocs`. A relative path or a file inside the checkout is refused. The tracked `.env.example` is never read.
 - The file is parsed with `python-dotenv` and **no variable interpolation**, so `$` in a password is literal. Process environment variables do **not** override keys in the file.
 - A key whose value is empty, such as `OPERATOR_TELEGRAM_IDS=`, uses its default.
-- Every validation error is a short content-free code, printed as `local_application_failed: <code>`. The code never echoes a value.
+- `run` reports configuration validation failures as short content-free codes, printed as `local_application_failed: <code>`. It never echoes a value. `check` wraps some initialization failures (temporary cleanup, invalid frozen configuration and database startup failures) as `local_application_failed: local_startup_failed`; see [Startup Refusals](RUNBOOK.md#startup-refusals).
 - The file contains secrets. See [Secrets](RUNBOOK.md#secrets-handling).
 
-`check` runs the whole startup without contacting Telegram: temporary cleanup, configuration, migrations, and a start and stop of the pinned model runtime. `check` needs the GPU and starts `llama-server`.
+`check` runs the local startup without contacting Telegram: temporary cleanup, configuration, migrations, and a start and stop of the pinned model runtime. It needs the GPU and starts `llama-server`; it sends no Telegram alerts and writes no application log. Do not use `--restart-on-failure` with `check`.
+
+`run --restart-on-failure` waits 60 seconds and retries an unexpected failure in the same Python process. A clean stop or cancellation ends the retry loop. The flag is for unattended `run`, such as the Windows scheduled task; installation and unattended stop behavior remain subject to platform verification.
 
 ## Paths
 
@@ -36,7 +39,7 @@ The `AppData`/`LocalCache` rule exists because some desktop apps on Windows redi
 | --- | --- | --- | --- | --- |
 | `BOT_TOKEN` | string, secret | required | Nonempty. It must contain `:`, and the part before the first `:` must be digits (`bot_token_required`) | Telegram Bot API token from BotFather |
 | `SHARED_PASSWORD` | string, secret | required | At least 16 characters (`shared_password_minimum_16_characters`) | The shared sign-in password. Use a random string. A change takes effect only after a restart; sign-ins do not survive a restart |
-| `DATABASE_URL` | SQLAlchemy URL, secret | required | Must start with `postgresql+psycopg://` (`postgresql_psycopg_url_required`) | PostgreSQL connection for profiles, for example `postgresql+psycopg://USER:PASSWORD@127.0.0.1:55432/tgbotdocs`. Migrations run automatically at startup. Use a non-superuser application role |
+| `DATABASE_URL` | SQLAlchemy URL, secret | required | Must start with `postgresql+psycopg://` (`postgresql_psycopg_url_required`) | PostgreSQL connection for profiles. The Windows development setup uses `postgresql+psycopg://USER:PASSWORD@127.0.0.1:55432/tgbotdocs_dev`; Linux Compose uses `db:5432` on its internal network, without a published port. Match the URL to the actual local installation, keep PostgreSQL unexposed, and use a non-superuser application role. Migrations run automatically at startup |
 
 The llama-server API key is **not** configured. Each application start generates a new random key and passes it to `llama-server` through a key file in `runtime-temp/`. The application removes the file when the runtime stops, and startup removes any key file a crash left behind. The runtime listens only on `127.0.0.1`.
 
@@ -46,9 +49,9 @@ The llama-server API key is **not** configured. Each application start generates
 | --- | --- | --- | --- | --- |
 | `RUNTIME_PORT` | integer | `18081` | 1–65535 (`invalid_runtime_port`). The port must be free on `127.0.0.1` at start (`runtime_port_in_use`) | Loopback port for the supervised `llama-server` |
 | `RUNTIME_EXECUTABLE` | absolute path | unset | Set together with `RUNTIME_EXECUTABLE_SHA256` or not at all (`runtime_executable_and_sha256_required_together`). The path must be absolute (`invalid_runtime_executable_override`) | **Linux image only.** Selects another platform's build of the pinned llama.cpp release b11221 instead of `DATA_ROOT/runtime-b11221/llama-server.exe`. Leave it unset on Windows |
-| `RUNTIME_EXECUTABLE_SHA256` | 64 lowercase hex characters | unset | Exactly 64 characters, `0-9a-f` only (`invalid_runtime_executable_override`) | The pinned SHA-256 of `RUNTIME_EXECUTABLE`. The file is hashed at start; a mismatch refuses startup (`runtime_artifact_hash_mismatch`) |
+| `RUNTIME_EXECUTABLE_SHA256` | 64 lowercase hex characters | unset | Exactly 64 characters, `0-9a-f` only (`invalid_runtime_executable_override`) | The expected SHA-256 of `RUNTIME_EXECUTABLE`. The file is hashed at start; a mismatch refuses startup with `runtime_artifact_hash_mismatch`. Its hash must also match the frozen runtime identity |
 
-The override replaces only the executable. The model and projector are still read from `DATA_ROOT/models/` and checked against their pinned hashes. With an override, every startup raises the alert `runtime_executable_differs_from_frozen`, because the executable is not the calibrated Windows build. Until the developer decides proposal **ED-017** ([OPEN_QUESTIONS](../requirements/OPEN_QUESTIONS.md)), recognition on that platform counts as unverified.
+The override replaces only the executable. The model and projector are still read from `DATA_ROOT/models/` and checked against their pinned hashes. A runtime executable whose SHA-256 differs from the frozen identity is refused with `runtime_executable_differs_from_frozen_recalibrate`; it does not start with an alert or silently change the frozen identity. Relocating the identical executable is allowed when both hashes match. This hash check does not verify the Linux image on a native Linux/NVIDIA host; that platform remains unverified.
 
 ## Timers and Capacity
 
@@ -91,15 +94,15 @@ Changing anything in this identity requires the T01 re-checks and possibly recal
 
 ## Example
 
-This mirrors [`.env.example`](../../.env.example). Replace the placeholders; never commit the real file.
+Illustrative Windows development configuration. Replace the paths and placeholders, and match the database URL to the PostgreSQL installation; the port and database below match the repository's Windows development setup. Never commit the real configuration.
 
 ```dotenv
-DATA_ROOT=C:\TgBotDocsData\prod
-FROZEN_CONFIG=C:\TgBotDocsData\prod\frozen\frozen-t01b.json
-TEMPORARY_ROOT=C:\TgBotDocsData\prod\temporary
+DATA_ROOT=C:\TgBotDocsData\dev
+FROZEN_CONFIG=C:\TgBotDocsData\dev\frozen\frozen-t01b.json
+TEMPORARY_ROOT=C:\TgBotDocsData\dev\temporary
 BOT_TOKEN=REPLACE_WITH_BOTFATHER_TOKEN
 SHARED_PASSWORD=REPLACE_WITH_RANDOM_PASSWORD
-DATABASE_URL=postgresql+psycopg://USER:PASSWORD@127.0.0.1:5432/tgbotdocs
+DATABASE_URL=postgresql+psycopg://USER:PASSWORD@127.0.0.1:55432/tgbotdocs_dev
 RUNTIME_PORT=18081
 OPERATOR_TELEGRAM_IDS=
 INACTIVITY_S=900

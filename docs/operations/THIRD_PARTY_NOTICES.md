@@ -95,7 +95,7 @@ The pins are recorded in [artifacts.json](../testing/evidence/t01a/artifacts.jso
 
 | Artifact | Version | License | Notes |
 | --- | --- | --- | --- |
-| CPython | 3.14.5 (the development environment uses the python.org Windows build at `C:\Python314`; uv may install its own build on other machines) | PSF License Version 2 (PSF-2.0), with bundled third-party notices in the distribution's license file (for example OpenSSL 3.0.20, zlib, libffi, SQLite, Tcl/Tk) | The delivered interpreter's own `LICENSE.txt` applies; which build is shipped depends on the installation procedure |
+| CPython | 3.14.5 (the development inventory used a python.org Windows x64 build; `uv` may install a different build on other machines) | PSF License Version 2 (PSF-2.0), with bundled third-party notices in the distribution's license file (for example OpenSSL 3.0.20, zlib, libffi, SQLite, Tcl/Tk) | The delivered interpreter's own `LICENSE.txt` applies; which build is shipped depends on the installation procedure |
 
 ## Container Base Images
 

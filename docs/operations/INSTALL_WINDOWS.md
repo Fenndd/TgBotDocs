@@ -141,7 +141,7 @@ Copy `.env.example` to the external configuration path, for example `C:\TgBotDoc
 | `DOWNLOAD_LIMIT` | Concurrent Telegram file downloads; default 2. |
 | `DELIVERY_S` | Result delivery window in seconds; default 60. |
 | `DELIVERY_ATTEMPTS` | Delivery attempts for a retryable error; default 3. |
-| `RUNTIME_EXECUTABLE`, `RUNTIME_EXECUTABLE_SHA256` | **Leave unset on Windows.** They are for the Linux image only (ED-017). |
+| `RUNTIME_EXECUTABLE`, `RUNTIME_EXECUTABLE_SHA256` | Optional relocation of the calibrated binary. A hash different from the frozen executable is refused and requires new calibration. Leave unset for the standard Windows layout; the Linux platform procedure is deferred (ED-017). |
 
 Timers must be positive numbers, and capacities must be positive integers.
 
@@ -153,7 +153,7 @@ Run the task as a dedicated standard (non-administrator) local account, for exam
 - modify access to the dedicated application `DATA_ROOT`; do not grant the bot access to PostgreSQL administrative credentials or its cluster;
 - the "Log on as a batch job" right, which S4U tasks require. If registering or starting the task fails with a logon error, the machine owner must grant this right. That is a system policy change.
 
-After installing the files and creating the external configuration, close the bot and harden the four **dedicated, disjoint** delivery directories. Existing broad inherited/explicit access is replaced; SYSTEM and Administrators retain full control. App/Python become read-only for the bot, config readable only, and application data writable. Updating protected app files later requires elevation. Do not pass a profile/drive root, the shared development checkout, or the PostgreSQL parent directory. The script rejects overlapping roots and reparse points before changing anything.
+After installing the files and creating the external configuration, close the bot and harden the four **dedicated, disjoint** delivery directories. Existing broad inherited/explicit access is replaced; SYSTEM and Administrators retain full control. App/Python become read-only for the bot, config readable only, and application data writable. Updating protected app files later requires elevation. Do not pass a profile/drive root, the shared development checkout, or the PostgreSQL parent directory. The script requires one enabled local user and rejects group/domain principals, overlapping roots and reparse points before changing anything. Use a dedicated standard account; broad Users/Authenticated Users principals are refused.
 
 ```powershell
 .\deploy\windows\secure-directories.ps1 -AppRoot C:\TgBotDocs\app -PythonRoot C:\TgBotDocs\uv-python -ConfigDirectory C:\TgBotDocs\config -DataRoot C:\TgBotDocsData\prod -BotAccount "$env:COMPUTERNAME\tgbotdocs"

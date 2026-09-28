@@ -1,6 +1,6 @@
 # User Guide
 
-Status: T08 user documentation, written on 2026-09-28 from the application code (`src/tgbotdocs/application/product.py`, `settings.py`, `documents.py`, `rendering.py`). Button labels and messages are quoted as the code sends them. The behavior described here is covered by the automated tests and a local run with a controlled Bot API session. It has **not yet been checked against real Telegram**; that happens in the final joint end-to-end test. Recognition quality has not been accepted yet. Treat every result as something to check against the document.
+Status: T08 user documentation, updated on 2026-09-28 from the current local implementation. The behavior described here is covered by automated tests and a local run with a controlled Bot API session. It has **not yet been checked against real Telegram**; the required joint end-to-end test and the shared sealed 70-case T01c/T07 quality benchmark remain pending. Native Linux has not been verified, and recognition quality has not been accepted. Treat every result as something to check against the document.
 
 The bot reads data from your documents on a local machine and returns the fields you asked for. It uses only the fields you define in your own profiles. It does not translate, calculate or summarize.
 
@@ -13,7 +13,7 @@ The bot reads data from your documents on a local machine and returns the fields
 
 If the password is wrong, the bot says "Incorrect password." After 5 wrong attempts within 15 minutes, the bot says "Too many attempts. Try again after the sign-in window expires." Wait for the 15-minute window to pass, then try again.
 
-Until you sign in, the bot downloads nothing and answers only "Send /start to sign in."
+Until you sign in, the bot downloads no documents and does not open Settings. A non-`/start` message receives "Send /start to sign in." Sending `/start` begins the password prompt.
 
 ## The Menu
 
@@ -190,7 +190,7 @@ Sign-ins, documents in progress and open drafts exist only in the bot's memory. 
 ## Privacy Basics
 
 - Documents, prepared pages and results are temporary. They are deleted after the result is delivered, or when the document is cancelled, expires or fails. They are never stored in the database or kept as history, and they are not part of backups.
+- Messages, documents and results are exchanged through Telegram. The bot processes document contents on the operator's local machine; it does not send them to a cloud recognition service.
 - The database keeps only your Telegram user ID and your saved profiles: name, applicability, original instruction, fields and guidance. Do not put personal data into an instruction unless you want it stored.
-- Processing happens on the operator's local machine, with no cloud recognition service.
 - Operators receive only technical alerts without document content. The product has no feature for operators to read your documents or results.
 - Ordinary file deletion does not guarantee physical erasure from disks or all system traces, and deleted Telegram messages may still exist in other copies.
