@@ -214,6 +214,10 @@ When the instruction requests repeating rows, the field itself MUST be a list, f
 "validator":null,"validator_basis":""}]}.
 Place this list object in the draft's lists array. Place the requested row attributes ONLY in its columns,
 never in scalar_fields. Both scalar_fields and lists arrays are required; use [] for the unused array.
+The structure above shows keys only: never copy its placeholder texts. Each draft description is one short
+English phrase naming the documents this profile applies to, taken from how the instruction describes them
+(for an instruction about "my water bills", the description is "Water utility bills"). Each field description
+states what the requested value is in this document type.
 """
 
 

@@ -12,6 +12,7 @@ are deleted at the end. This is a functional check, not quality acceptance.
 import argparse
 import asyncio
 from datetime import datetime, timezone
+from decimal import Decimal
 from io import BytesIO
 import json
 from pathlib import Path
@@ -214,7 +215,8 @@ async def check(source, summary, verbose=False):
                     click(lambda a: isinstance(a, tuple) and a[0] == "save")
                     await until(lambda: len(results()) == 3 and owner not in documents.jobs, 900)
                     summary["receipt_result"] = results()[-1].splitlines()[0]
-                    summary["receipt_total_exact"] = RECEIPT_TOTAL in results()[-1]
+                    # Decimals are normalized exactly (CONTRACTS): the printed 57.30 is 57.3.
+                    summary["receipt_total_exact"] = str(Decimal(RECEIPT_TOTAL).normalize()) in results()[-1]
                     summary["receipt_chosen_by_user"] = "(chosen by you)" in results()[-1]
             summary["receipt_path_s"] = round(time.monotonic() - begin, 1)
             summary["profiles_after"] = len(await res.storage.list_profiles(owner))
