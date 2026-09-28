@@ -12,7 +12,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from typing import Any
 
@@ -190,23 +190,34 @@ class GpuScheduler:
 
 
 class _ScheduledAdapter:
-    def __init__(self, adapter, scheduler, job_id, admission_order, budget):
+    def __init__(self, adapter, scheduler, job_id, admission_order, budget, waited, started=None):
         self.adapter, self.scheduler = adapter, scheduler
         self.job_id, self.admission_order, self.budget = job_id, admission_order, budget
+        self.waited, self.started = waited, started
 
     def __getattr__(self, name):
         return getattr(self.adapter, name)
 
     async def _invoke(self, name, args, kwargs):
         budget = self.budget.get()
+        loop = asyncio.get_running_loop()
+        queued_at, began = loop.time(), None
 
         async def operation():
+            nonlocal began
+            began = loop.time()
+            if self.started is not None:
+                self.started()
             if budget is not None:
                 kwargs["remaining_budget_s"] = budget.remaining
             return await getattr(self.adapter, name)(*args, **kwargs)
 
-        return await self.scheduler.run(self.job_id, operation, admission_order=self.admission_order,
-                                        budget=budget)
+        try:
+            return await self.scheduler.run(self.job_id, operation, admission_order=self.admission_order,
+                                            budget=budget)
+        finally:
+            # Reported before the core appends this call's record, in call order.
+            self.waited((loop.time() if began is None else began) - queued_at)
 
     async def generate(self, *args, **kwargs):
         return await self._invoke("generate", args, kwargs)
@@ -220,29 +231,92 @@ async def _unlocked_turn():
     yield
 
 
+class _BatchLedger:
+    """Receives the core's batch traces and removes GPU queue wait from their times.
+
+    The frozen core measures an alternate view with the wall clock, so a turn given
+    to another job between the primary and the alternate call would be charged to
+    this job. ``block`` is the budget's charged time of the whole batch, which the
+    scheduler already keeps free of queue wait.
+    """
+
+    def __init__(self, target, budget, alternate_waits):
+        self.target, self.budget, self.alternate_waits = target, budget, alternate_waits
+        self.mark = budget.used
+
+    def append(self, trace):
+        block, self.mark = self.budget.used - self.mark, self.budget.used
+        wait = self.alternate_waits.pop(len(self.target), 0.0)
+        alternate_s = max(0.0, trace.alternate_s - wait)
+        failure = trace.alternate_error
+        if failure is not None:
+            failure = replace(failure, phase_s=alternate_s)
+        self.target.append(replace(trace, primary_s=max(0.0, block - alternate_s), alternate_s=alternate_s,
+                                   alternate_error=failure))
+
+
 class ScheduledRecognitionCore(RecognitionCore):
-    """One instance per job; unchanged core work with scheduled adapter calls.
+    """One instance per job phase; unchanged core work with scheduled adapter calls.
 
     The private override signatures and budget accounting are deliberately small
     compatibility seams. Regression tests cover them; repeat those checks when
-    the frozen core changes. Calls queued during rendering do not charge wait.
+    the frozen core changes. Calls queued during rendering do not charge wait, and
+    queue wait is removed from every recorded call and batch duration.
     """
 
-    def __init__(self, adapter, settings, *, scheduler, job_id, admission_order=None):
+    def __init__(self, adapter, settings, *, scheduler, job_id, admission_order=None, started=None):
         self._budget = ContextVar("recognition_budget", default=None)
-        proxy = _ScheduledAdapter(adapter, scheduler, job_id, admission_order, self._budget)
+        self._waits: list[float] = []
+        self._alternate_waits: dict[int, float] = {}
+        self._charged = None
+        self.waited_s = 0.0
+        proxy = _ScheduledAdapter(adapter, scheduler, job_id, admission_order, self._budget, self._waited,
+                                  started)
         super().__init__(proxy, settings, turn=_unlocked_turn)
 
+    def _waited(self, seconds):
+        self._waits.append(seconds)
+        self.waited_s += seconds
+
+    def charged_s(self, elapsed_s):
+        """The job's own processing time of this phase, even after cancellation."""
+        if self._charged is not None:
+            return self._charged.used
+        return max(0.0, elapsed_s - self.waited_s)
+
+    def _exclude_waits(self, job, records, waits):
+        calls, new = job.observer.calls, self._waits[waits:]
+        for offset, index in enumerate(range(records, len(calls))):
+            if offset < len(new):
+                record = calls[index]
+                calls[index] = record.model_copy(update={"duration_s": max(0.0, record.duration_s - new[offset])})
+
     async def _count(self, job, *args, **kwargs):
+        self._charged = job.budget
         token = self._budget.set(job.budget)
+        records, waits = len(job.observer.calls), len(self._waits)
         try:
             return await super()._count(job, *args, **kwargs)
         finally:
             self._budget.reset(token)
+            self._exclude_waits(job, records, waits)
 
     async def _call(self, job, *args, **kwargs):
+        self._charged = job.budget
         token = self._budget.set(job.budget)
+        records, waits = len(job.observer.calls), len(self._waits)
         try:
             return await super()._call(job, *args, **kwargs)
         finally:
             self._budget.reset(token)
+            self._exclude_waits(job, records, waits)
+
+    async def _alternate(self, job, document, pages, text_for, schema_for, parse, index):
+        before = self.waited_s
+        try:
+            return await super()._alternate(job, document, pages, text_for, schema_for, parse, index)
+        finally:
+            self._alternate_waits[index] = self._alternate_waits.get(index, 0.0) + self.waited_s - before
+
+    async def _extract(self, job, document, profile, batches):
+        await super()._extract(job, document, profile, _BatchLedger(batches, job.budget, self._alternate_waits))

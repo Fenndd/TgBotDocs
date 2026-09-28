@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
 import json
 import math
 import os
@@ -56,6 +57,7 @@ class TemporaryLifecycle:
         self._pending: set[Path] = set()
         self._unsafe = False
         self._processes: dict[str, dict] = {}
+        self._reserved: dict[object, int] = {}
         self._cleanup_lock = asyncio.Lock()
 
     @property
@@ -292,21 +294,58 @@ class TemporaryLifecycle:
                 _safe_path(Path(directory) / name)
         return path
 
+    @staticmethod
+    def _usage(root):
+        total = 0
+        for directory, folders, files in os.walk(root, followlinks=False):
+            for name in folders + files:
+                path = _safe_path(Path(directory) / name)
+                if path.is_file():
+                    total += path.stat().st_size
+        return total
+
+    def _fits(self, extra_bytes):
+        """Existing files plus outstanding render reservations plus the new bytes."""
+        reserved = sum(self._reserved.values())
+        return self._usage(self.root) + reserved + extra_bytes <= self.quota_bytes and (
+            shutil.disk_usage(self.root).free - reserved - extra_bytes >= self.free_reserve_bytes)
+
     def check_capacity(self, extra_bytes=0):
         if not self.intake_available:
             raise LifecycleError("temporary_unavailable")
         if type(extra_bytes) is not int or extra_bytes < 0:
             raise ValueError("invalid_capacity_request")
-        total = 0
-        for directory, folders, files in os.walk(self.root, followlinks=False):
-            for name in folders + files:
-                path = _safe_path(Path(directory) / name)
-                if path.is_file():
-                    total += path.stat().st_size
-        if total + extra_bytes > self.quota_bytes or shutil.disk_usage(self.root).free - extra_bytes < (
-            self.free_reserve_bytes
-        ):
+        if not self._fits(extra_bytes):
             raise LifecycleError("storage_limit")
+
+    def job_usage(self, path):
+        """Bytes already held by one owned job directory (originals and derived files)."""
+        return self._usage(self._validate_job(path))
+
+    @contextmanager
+    def reserve(self, nbytes):
+        """Hold global quota for derived renders the frozen core may write into a job.
+
+        Admitted jobs keep processing while intake is closed for new documents,
+        so a reservation needs initialized ownership, not open intake. Existing
+        renders are counted twice while held, which only errs on the safe side.
+        """
+        if type(nbytes) is not int or nbytes < 0:
+            raise ValueError("invalid_capacity_request")
+        if self._owner is None or self._unsafe:
+            raise LifecycleError("temporary_unavailable")
+        try:
+            fits = self._fits(nbytes)
+        except OSError:
+            raise LifecycleError("storage_limit") from None
+        if not fits:
+            raise LifecycleError("storage_limit")
+        key = object()
+        self._reserved[key] = nbytes
+        try:
+            yield
+        finally:
+            self._reserved.pop(key, None)
 
     def create_job(self, job_id):
         """job_id is intentionally not used as a filesystem name or stored."""
