@@ -22,6 +22,13 @@ class Session:
     seen: set = field(default_factory=set)
     restart_notified: bool = False
     reminder_at: float = float("-inf")
+    active_at: float = 0.0
+
+
+# A signed-out user's idle actor is released after this; sign-in state is unaffected.
+IDLE_ACTOR_S = 3600.0
+# Duplicate update IDs arrive close together; older IDs need not be remembered forever.
+SEEN_LIMIT = 2000
 
 
 MENU = ReplyKeyboardMarkup(keyboard=[
@@ -127,10 +134,14 @@ class ProductApplication:
         session = self.session(event.owner)
         if self.closing and event.kind not in ("settings_result", "document_terminal"):
             return
+        if event.kind != "tick":
+            session.active_at = self.clock()
         if event.update_id is not None:
             if event.update_id in session.seen:
                 return
             session.seen.add(event.update_id)
+            if len(session.seen) > SEEN_LIMIT:
+                session.seen = set(sorted(session.seen)[-SEEN_LIMIT // 2:])
         if event.created_at is not None and event.created_at < self.started_at:
             if event.kind == "text" and hmac.compare_digest(str(event.payload).encode(), self.config.password.encode()):
                 self._delete_password(event)
@@ -217,8 +228,25 @@ class ProductApplication:
             self.menu(event.owner)
 
     def tick(self):
+        now = self.clock()
         for owner in tuple(self.actors):
-            self.submit(Event("tick", owner))
+            if self._retirable(owner, now):
+                self._retire(owner)
+            else:
+                self.submit(Event("tick", owner))
+
+    def _retirable(self, owner, now):
+        session, settings = self.sessions.get(owner), self.settings.sessions.get(owner)
+        return (session is not None and not session.signed_in and not session.awaiting_password
+                and not self.job_active(owner) and (settings is None or settings.state == "closed")
+                and self.actors[owner].idle and now - session.active_at >= IDLE_ACTOR_S)
+
+    def _retire(self, owner):
+        """Release a signed-out user's idle actor; a later update creates a new one."""
+        actor = self.actors.pop(owner)
+        self.sessions.pop(owner, None)
+        self.settings.sessions.pop(owner, None)
+        self.task(actor.close())
 
     async def close(self):
         self.closing = True

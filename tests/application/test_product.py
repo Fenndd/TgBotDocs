@@ -158,6 +158,33 @@ async def test_lock_window_global_surge_independent_users_and_stale_password():
         await app.close()
 
 
+async def test_idle_signed_out_actors_are_released_and_signed_in_users_are_kept():
+    now = [10.0]
+    app = application(clock=lambda: now[0])
+    try:
+        await text(app, "hello", 1)
+        await text(app, "/start", 2)
+        await text(app, "/start", 3)
+        await text(app, app.config.password, 3)
+        now[0] += 3601
+        app.tick()
+        await drain(app)
+        # Only the signed-out, idle user without a pending password prompt is released.
+        assert 1 not in app.actors and 1 not in app.sessions
+        assert 2 in app.actors and app.session(2).awaiting_password
+        assert 3 in app.actors and app.session(3).signed_in
+        await text(app, "hello again", 1)
+        assert 1 in app.actors
+        assert sum(owner == 1 and "Send /start" in value for owner, value, _ in app.transport.sent) == 2
+        session = app.session(3)
+        for update in range(1, 2 + 2000):
+            app.submit(Event("text", 3, update_id=update, payload="x"))
+        await drain(app)
+        assert len(session.seen) <= 2000 and max(session.seen) == 2001
+    finally:
+        await app.close()
+
+
 async def test_personal_dialogue_expiry_menu_text_routing_and_stale_buttons():
     now = [1.0]
     app = application(clock=lambda: now[0])
