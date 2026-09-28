@@ -63,6 +63,24 @@ def test_timer_and_capacity_configuration_is_parsed_and_validated(tmp_path):
             AppConfig.load(path)
 
 
+def test_platform_runtime_executable_override_needs_an_absolute_path_and_pinned_hash(tmp_path):
+    path = tmp_path / "bot.env"
+    base = (f"DATA_ROOT={tmp_path}\nFROZEN_CONFIG={tmp_path}/frozen.json\nBOT_TOKEN=123456:synthetic_token\n"
+            "SHARED_PASSWORD=synthetic-password-only\nDATABASE_URL=postgresql+psycopg://synthetic\n")
+    path.write_text(base)
+    assert AppConfig.load(path).runtime_executable is None
+    digest = "a" * 64
+    path.write_text(base + f"RUNTIME_EXECUTABLE={tmp_path}/llama-server\nRUNTIME_EXECUTABLE_SHA256={digest}\n")
+    cfg = AppConfig.load(path)
+    assert cfg.runtime_executable == tmp_path / "llama-server" and cfg.runtime_executable_sha256 == digest
+    for extra, code in ((f"RUNTIME_EXECUTABLE={tmp_path}/llama-server\n", "required_together"),
+                        (f"RUNTIME_EXECUTABLE=relative\nRUNTIME_EXECUTABLE_SHA256={digest}\n", "invalid_runtime"),
+                        (f"RUNTIME_EXECUTABLE={tmp_path}/x\nRUNTIME_EXECUTABLE_SHA256=ABC\n", "invalid_runtime")):
+        path.write_text(base + extra)
+        with pytest.raises(ConfigurationError, match=code):
+            AppConfig.load(path)
+
+
 def test_virtualized_appdata_is_rejected(tmp_path):
     path = tmp_path / "bot.env"
     path.write_text(f"DATA_ROOT={tmp_path}/AppData/Local/TgBotDocs\nFROZEN_CONFIG={tmp_path}/f.json\n")

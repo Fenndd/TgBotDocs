@@ -1,4 +1,9 @@
-"""Local command entry point. The check command makes no Telegram requests."""
+"""Local command entry point.
+
+``check`` verifies cleanup, configuration, migrations and the frozen model runtime
+without any Telegram request. ``run`` starts the bot: the same startup, then long
+polling until stopped.
+"""
 
 import argparse
 import asyncio
@@ -15,12 +20,20 @@ from .storage import StorageUnavailable
 
 def main():
     parser = argparse.ArgumentParser(prog="tgbotdocs")
-    parser.add_argument("action", choices=("check",))
+    parser.add_argument("action", choices=("check", "run"))
     parser.add_argument("--config", type=Path, default=None)
     args = parser.parse_args()
     source = args.config or Path(os.environ.get("TGBOTDOCS_CONFIG", ""))
     try:
-        print(asyncio.run(check_configuration(source)))
+        if args.action == "run":
+            from .application.service import configure_logging, serve
+
+            configure_logging(source)
+            print("tgbotdocs_starting", flush=True)
+            asyncio.run(serve(source))
+            print("tgbotdocs_stopped", flush=True)
+        else:
+            print(asyncio.run(check_configuration(source)))
     except KeyboardInterrupt:
         return 0
     except (ConfigurationError, LifecycleError, ModelError, ConfigError, StorageUnavailable) as error:

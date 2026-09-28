@@ -1,9 +1,10 @@
 # T05 Recognition Integration Progress
 
 Date: 2026-09-28. Status: application seams verified with scripted model
-substitutes; the integrated real-model product check is recorded separately in
-[STATUS](../../STATUS.md). Recognition quality is **not accepted**: it depends on
-the deferred single sealed T01c/T07 benchmark. Frozen recognition source,
+substitutes and integrated with the product; a local real-model product run is
+recorded below and in the [T06 report](T06_PROGRESS_REPORT.md). Recognition
+quality is **not accepted**: it depends on the deferred single sealed T01c/T07
+benchmark. Frozen recognition source,
 prompts, thresholds, policy and configuration remain unchanged
 (`environment_mismatches` stays empty); every change is in `application/`.
 
@@ -40,10 +41,19 @@ prompts, thresholds, policy and configuration remain unchanged
   downloads and fail explicitly.
 - Existing scheduler/core parity tests still pass, including the full core run
   with a retry and V2 through the scheduler.
+- Integrated through the T06 state machine: scenario and model-based tests cover
+  budget continuation across a manual choice or a saved profile, turn order and
+  snapshot immutability ([T06 report](T06_PROGRESS_REPORT.md)).
+- `tests/application/test_service.py` runs the real frozen core (inspection,
+  rendering, verification with the V2 view, merging) through the production
+  composition with a deterministic model.
+- A local real-model run through the product (`scripts/check-product-local.py`,
+  frozen CUDA runtime, real PostgreSQL, controlled Bot API) completed matching and
+  extraction for synthetic documents on the file and photo paths and after an
+  in-job profile creation; no job directory or reservation remained. This is
+  functional evidence, not quality acceptance.
 
 ## Pending
 
-- The integrated product path (T06 state machine with this service) and a local
-  real-model check through the product with a controlled Telegram substitute.
 - Quality, language and delivery-path acceptance: the single sealed integrated
   benchmark after the joint real-Telegram E2E.

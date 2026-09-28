@@ -53,6 +53,10 @@ class AppConfig:
     download_limit: int = 2
     delivery_s: float = 60.0
     delivery_attempts: int = 3
+    # A platform build of the pinned llama.cpp release (the Linux image): its own
+    # path and pinned SHA-256. Unset on Windows, where the frozen executable is used.
+    runtime_executable: Path | None = None
+    runtime_executable_sha256: str | None = None
 
     @classmethod
     def load(cls, path: Path | None = None):
@@ -95,6 +99,14 @@ class AppConfig:
                 if value < 1:
                     raise ConfigurationError("invalid_capacity_setting")
                 parameters[name] = value
+            executable, digest = values.get("RUNTIME_EXECUTABLE") or None, values.get("RUNTIME_EXECUTABLE_SHA256") or None
+            if (executable is None) != (digest is None):
+                raise ConfigurationError("runtime_executable_and_sha256_required_together")
+            if executable is not None:
+                executable = Path(executable)
+                if not executable.is_absolute() or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+                    raise ConfigurationError("invalid_runtime_executable_override")
+                parameters.update(runtime_executable=executable, runtime_executable_sha256=digest)
             return cls(data, frozen, temporary, database, token, password, port, operators, **parameters)
         except ConfigurationError:
             raise

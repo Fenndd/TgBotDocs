@@ -2,7 +2,7 @@
 
 from contextlib import AsyncExitStack, asynccontextmanager
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import tempfile
 import json
@@ -93,8 +93,16 @@ async def _resources(source, temporary, *, alert=None):
             stack.push_async_callback(storage.close)
             await storage.migrate()
             await storage.health()
-            runtime = LocalRuntime(runtime_files(cfg.data_root), frozen.runtime_profile.profile(),
-                                   port=cfg.runtime_port)
+            files = runtime_files(cfg.data_root)
+            if cfg.runtime_executable is not None:
+                # Another platform's build of the pinned release, verified by its own
+                # pinned hash. It is not the calibrated executable: that platform needs
+                # its own verification (T08), and the operator is told so.
+                files = replace(files, executable=cfg.runtime_executable,
+                                executable_sha256=cfg.runtime_executable_sha256)
+                if alert is not None:
+                    await alert("runtime_executable_differs_from_frozen")
+            runtime = LocalRuntime(files, frozen.runtime_profile.profile(), port=cfg.runtime_port)
             await stack.enter_async_context(runtime)
             adapter = ModelAdapter(runtime.adapter_settings, restart=runtime.restart)
             stack.push_async_callback(adapter.close)
