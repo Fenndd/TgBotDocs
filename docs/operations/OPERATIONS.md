@@ -1,6 +1,6 @@
 # Operating Model and Initial Parameters
 
-Status: v1 operating specification; revised on 2026-09-27 after the independent review (admission control, timer semantics, scheduler, runtime supervision and launch profile, operator alerts). Core deadlines and behavior have been accepted by the user; the protective settings below are engineering initial values that can be changed through configuration. Not yet verified through execution. Transitions are specified in [STATE_MACHINE](../architecture/STATE_MACHINE.md).
+Status: v1 operating specification; revised on 2026-09-27 after the independent review (admission control, timer semantics, scheduler, runtime supervision and launch profile, operator alerts). Core deadlines and behavior have been accepted by the user; the protective settings below are engineering initial values that can be changed through configuration. Local implementation and checks are recorded in [STATUS](../../STATUS.md); quality, real Telegram and platform acceptance remain distinct. Transitions are specified in [STATE_MACHINE](../architecture/STATE_MACHINE.md).
 
 ## Processes
 
@@ -78,8 +78,8 @@ Requests use streaming, greedy decoding with a fixed seed, schema-constrained ou
 
 ## Configuration and Delivery
 
-Secrets: Telegram token, shared password, PostgreSQL access, llama-server API key. Settings: local model endpoint, weights and temporary directory paths, timers, quotas, admission per-page times, launch profile, and optional operator IDs. Actual values are kept outside Git and outside the source tree used by development assistants; the application reads the path to its `.env` file from an environment variable. A future .env.example will contain only names and safe examples, including the guidance that the shared password should be a random string of at least 16 characters.
+Secrets: Telegram token, shared password, PostgreSQL access, llama-server API key. Settings: local model endpoint, weights and temporary directory paths, timers, quotas, admission per-page times, launch profile, and optional operator IDs. Actual values are kept outside Git and outside the source tree used by development assistants; the application reads its external `.env` through `--config` or `TGBOTDOCS_CONFIG`. The tracked [example](../../.env.example) contains safe placeholders and the random-password guidance; [CONFIGURATION](CONFIGURATION.md) describes validation.
 
-The application does not download weights while processing a document. Weights and versions are installed in a separate preparation step. A backup includes database settings and necessary configuration, but no temporary documents; secret backup storage is a separate responsibility of the environment owner. Packaging per platform: ADR-0005.
+The application does not download weights while processing a document. Weights and versions are installed in a separate preparation step. The application database backup contains only users, current profiles and the migration version; see [BACKUP_RESTORE](BACKUP_RESTORE.md). Temporary documents, logs, evidence and secrets are excluded. Protect external configuration/admin credentials separately under the environment owner's responsibility. Packaging per platform: ADR-0005.
 
-Processes and configuration are not created in this session. Commands will be added only after they have been verified in development tasks.
+Current commands and verified limits are in [RUNBOOK](RUNBOOK.md), [INSTALL_WINDOWS](INSTALL_WINDOWS.md), [INSTALL_LINUX](INSTALL_LINUX.md) and the [local joint-test guide](LOCAL_PC_JOINT_TEST.md). Instructions do not substitute for native platform or joint Telegram verification.

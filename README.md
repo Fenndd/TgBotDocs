@@ -1,8 +1,10 @@
 # Telegram Bot for Extracting Data from Documents
 
-Stage: T01 implementation is active. [T01a runtime feasibility](docs/testing/T01A_REPORT.md) meets the technical condition to implement T01b; quality acceptance and the finished bot remain incomplete. The intended bot receives documents in Telegram and returns only the data requested in the user's personal text settings. The first version accepts arbitrary documents in any languages, with an honest refusal when they cannot be read; processing is local and must fit the current PC's hardware.
+Stage: the local T02–T07 product is implemented, T01b recognition is frozen, and T08 packaging/operations have undergone review remediation. The bot supports private sign-in, personal confirmed profiles, file/photo/album/Several pages intake, local recognition, type clarification, profile instructions inside a job, partial results, cancellation, expiry and restart cleanup. Current verification and remaining acceptance checks are in [STATUS](STATUS.md).
 
-The selected stack is Python + aiogram + PostgreSQL and direct local Qwen3-VL-4B-Instruct Q4_K_M through llama.cpp. Current experimental commands and their limitations are recorded in the [T01a report](docs/testing/T01A_REPORT.md). T01b is calibrated and frozen on 22 reviewed cases, and T02 is active. Recognition quality is not accepted yet. Defer benchmark preparation and the single sealed integrated run shared by T01c and T07 until the complete product is available through Telegram and the final real-Telegram E2E can be done with the developer. Local T07 resilience checks and T08 preparation may proceed first; they do not complete acceptance.
+The stack is Python + aiogram + PostgreSQL with local Qwen3-VL-4B-Instruct Q4_K_M through pinned llama.cpp. Recognition quality remains **unaccepted**. The final real-Telegram E2E is performed jointly with the developer; only then prepare/review/seal the one integrated T01c/T07 benchmark. Native Linux and clean-machine Windows unattended delivery checks remain separate and unperformed. No cloud-recognition fallback is provided.
+
+For this developer PC, follow [the exact joint-test steps](docs/operations/LOCAL_PC_JOINT_TEST.md). The private configuration is outside Git; fill its blank bot token locally before a joint start. Generic platform instructions are [Windows](docs/operations/INSTALL_WINDOWS.md) and [Linux](docs/operations/INSTALL_LINUX.md); configuration, operation, permitted backups and notices are linked below.
 
 ## Navigation
 
@@ -19,6 +21,8 @@ The selected stack is Python + aiogram + PostgreSQL and direct local Qwen3-VL-4B
 | [Security](docs/security/SECURITY.md) | Data processing and storage boundaries |
 | [Verification](docs/testing/TEST_STRATEGY.md) | Acceptance scenarios and quality checks |
 | [Acceptance criteria](docs/testing/ACCEPTANCE_PLAN.md), [operations](docs/operations/OPERATIONS.md) | Test set, measurements, queue, timers, and cleanup |
+| [Configuration](docs/operations/CONFIGURATION.md), [runbook](docs/operations/RUNBOOK.md), [user guide](docs/operations/USER_GUIDE.md) | External secrets/settings, runtime operation and user dialogue |
+| [Backup/restore](docs/operations/BACKUP_RESTORE.md), [third-party notices](docs/operations/THIRD_PARTY_NOTICES.md) | Permitted persistent data and delivery license boundaries |
 | [Roadmap](docs/planning/ROADMAP.md) | Stages and dependencies |
 | [Task specifications](specs/README.md) | Individual tasks for subsequent development |
 
@@ -29,4 +33,4 @@ The selected stack is Python + aiogram + PostgreSQL and direct local Qwen3-VL-4B
 - [Delegation](docs/engineering/AI_ORCHESTRATION.md) covers subtask selection and subagent parameters.
 - [Preparation history](docs/engineering/SETUP_NOTES.md) explains the rationale for the initial structure.
 
-Documentation is maintained in English. Exploratory tooling exists under `tools/t01`; it is not a finished bot or product installer. The original idea remains in the provided file outside the repository; a full copy is not transferred into the project.
+Documentation is maintained in English. Exploratory recognition tooling under `tools/t01` remains distinct from the application under `src/tgbotdocs` and platform packaging under `deploy`. The original idea remains in the provided file outside the repository; a full copy is not transferred into the project.

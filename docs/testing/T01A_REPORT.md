@@ -1,6 +1,6 @@
 # T01a runtime feasibility report
 
-Date: 2026-09-27. **The technical transition condition to T01b is met.** This is not a quality acceptance result, a frozen recognition configuration, or permission to start T02. The [T01 specification](../../specs/T01-recognition-baseline.md) requires successful T01c before T02.
+Date: 2026-09-27. **The technical transition condition to T01b is met.** This is not a quality acceptance result, a frozen recognition configuration, or permission to start T02. The original T01c-before-T02 gate was superseded on 2026-09-28 by [S-14](../requirements/SOURCES.md#s-14--t01c-timing-and-acceptance-2026-09-28): T02 may start after T01b freeze. Benchmark preparation and the one sealed T01c/T07 run remain deferred until the completed Telegram product and joint E2E; recognition quality is not accepted by this report.
 
 ## Scope and reproducibility
 
