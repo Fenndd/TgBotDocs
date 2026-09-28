@@ -315,7 +315,11 @@ class TemporaryLifecycle:
             raise LifecycleError("temporary_unavailable")
         if type(extra_bytes) is not int or extra_bytes < 0:
             raise ValueError("invalid_capacity_request")
-        if not self._fits(extra_bytes):
+        try:
+            fits = self._fits(extra_bytes)
+        except OSError:
+            raise LifecycleError("storage_limit") from None
+        if not fits:
             raise LifecycleError("storage_limit")
 
     def job_usage(self, path):

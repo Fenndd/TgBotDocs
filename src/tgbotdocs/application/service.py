@@ -13,7 +13,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
 from logging.handlers import TimedRotatingFileHandler
+import math
 from pathlib import Path
+import re
 import time
 
 from aiogram import Bot
@@ -32,6 +34,34 @@ from .transport import OrderedTransport, TelegramTransport, dispatcher
 
 EVENTS = logging.getLogger("tgbotdocs.events")
 ALLOWED_UPDATES = ["message", "callback_query"]
+TECHNICAL_ALERTS = frozenset({
+    "startup_completed", "startup_failed", "service_failed", "service_retry_scheduled",
+    "password_message_deletion_failed", "password_attempt_surge", "temporary_startup_failed",
+    "temporary_ownership_failed", "intake_closed", "intake_reopened", "delivery_failed",
+    "database_available", "database_unavailable", "runtime_restarted", "runtime_available",
+    "runtime_unavailable",
+})
+
+
+class TechnicalEventsOnly(logging.Filter):
+    """Dependency diagnostics and tracebacks are not permitted persistent data."""
+
+    def filter(self, record):
+        if record.name != "tgbotdocs.events" or record.exc_info or record.stack_info or not isinstance(record.msg, str):
+            return False
+        if record.msg == "%s":
+            return isinstance(record.args, tuple) and len(record.args) == 1 and record.args[0] in TECHNICAL_ALERTS
+        if record.msg in TECHNICAL_ALERTS:
+            return not record.args
+        if record.msg != "job_finished %s %s pages=%d charged_s=%.1f" or not isinstance(record.args, tuple):
+            return False
+        if len(record.args) != 4:
+            return False
+        job, code, pages, charged = record.args
+        return (isinstance(job, str) and re.fullmatch(r"[0-9a-f]{32}", job) is not None
+                and isinstance(code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,79}", code) is not None
+                and type(pages) is int and pages >= 0 and type(charged) in (int, float)
+                and math.isfinite(charged) and charged >= 0)
 
 
 class Alerts:
@@ -124,7 +154,12 @@ def configure_logging(source):
     handler = TimedRotatingFileHandler(directory / "tgbotdocs.log", when="midnight", backupCount=7,
                                        encoding="utf-8", utc=True)
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    handler.addFilter(TechnicalEventsOnly())
+    handler._tgbotdocs_owned = True
     root = logging.getLogger()
+    for previous in root.handlers:
+        if getattr(previous, "_tgbotdocs_owned", False):
+            previous.close()
     root.handlers[:] = [handler]
     root.setLevel(logging.WARNING)
     logging.getLogger("tgbotdocs").setLevel(logging.INFO)

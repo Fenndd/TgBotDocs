@@ -9,6 +9,40 @@ from tgbotdocs.recognition.contracts import ExtractionProfile, ScalarField
 from tgbotdocs.storage import ProfileConflict, ProfileNotFound, StorageUnavailable
 
 
+async def test_queued_profile_preview_is_withdrawn_after_logout_or_session_replacement():
+    from tgbotdocs.application.transport import OrderedTransport
+
+    entered, release = asyncio.Event(), asyncio.Event()
+    sent = []
+
+    class DelayedTransport:
+        async def send(self, owner, text, **kwargs):
+            if text == "hold":
+                entered.set()
+                await release.wait()
+            sent.append(text)
+
+    transport = OrderedTransport(DelayedTransport())
+    store = Store()
+    flow = SettingsFlow(store, Compiler(), PreviewService(store), transport, lambda event: None)
+    first = asyncio.create_task(transport.send(1, "hold"))
+    await entered.wait()
+    try:
+        flow._send(1, "SYNTHETIC_PRIVATE_PROFILE_PREVIEW")
+        await asyncio.sleep(0)
+        flow.discard(1)  # The product's logout/Cancel path invalidates Settings.
+        flow.sessions.pop(1)
+        flow.session(1)  # A later session cannot authorize the older preview.
+        release.set()
+        await first
+        await asyncio.gather(*tuple(flow.tasks))
+        assert sent == ["hold"]
+    finally:
+        release.set()
+        await first
+        await flow.close()
+
+
 def profile(owner=1, name="Synthetic card"):
     return ExtractionProfile(id=str(uuid4()), owner=str(owner), version=1, name=name,
         description="Fictional document", original_instruction="Read identifier",

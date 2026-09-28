@@ -13,6 +13,7 @@ from .compiler import CompileError
 from .events import ButtonClick, Event
 from .profiles import DeletePreview, PreviewExpired, ProfilePreview
 from .rendering import utf16_length
+from .transport import SendSkipped
 
 
 @dataclass(repr=False)
@@ -113,12 +114,20 @@ class SettingsFlow:
             keyboard.append([InlineKeyboardButton(text=label, callback_data=token)])
         markup = InlineKeyboardMarkup(inline_keyboard=keyboard) if keyboard else None
         revision = session.revision
+
+        def current():
+            return not self.closing and self.sessions.get(owner) is session and session.revision == revision
+
         async def send():
             parts = split_preview(text)
-            for index, part in enumerate(parts):
-                if self.closing or self.session(owner).revision != revision:
-                    return
-                await self.transport.send(owner, part, reply_markup=markup if index == len(parts) - 1 else None)
+            try:
+                for index, part in enumerate(parts):
+                    if not current():
+                        return
+                    await self.transport.send(owner, part, reply_markup=markup if index == len(parts) - 1 else None,
+                                              guard=current)
+            except SendSkipped:
+                return
         self._task(send())
 
     def _request(self, owner, state, operation, result_kind):

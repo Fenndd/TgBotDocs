@@ -10,6 +10,24 @@ import pytest
 from tgbotdocs.application.lifecycle import LifecycleError, TemporaryLifecycle
 
 
+async def test_capacity_io_failure_is_controlled_without_creating_a_partial_job(tmp_path, monkeypatch):
+    lifecycle = TemporaryLifecycle(tmp_path / "temporary", free_reserve_bytes=0)
+    await lifecycle.initialize()
+    original = lifecycle._fits
+
+    def unavailable(extra):
+        raise OSError("synthetic filesystem failure")
+
+    monkeypatch.setattr(lifecycle, "_fits", unavailable)
+    with pytest.raises(LifecycleError, match="storage_limit"):
+        lifecycle.create_job("synthetic")
+    assert not list(lifecycle.root.glob("job-*"))
+    assert not (lifecycle.root / ".tgbotdocs-create.json").exists()
+    monkeypatch.setattr(lifecycle, "_fits", original)
+    job = lifecycle.create_job("synthetic")
+    assert await lifecycle.cleanup_job(job)
+
+
 async def test_restart_sweeps_only_owned_random_jobs_before_dependencies(tmp_path):
     root = tmp_path / "temporary"
     first = TemporaryLifecycle(root, free_reserve_bytes=0)
