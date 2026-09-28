@@ -114,6 +114,15 @@ Direct developer instruction:
 - Make small, logical changes; run the relevant checks and commit each verified unit. Local dependency installation remains authorized under S-15; this grants no authority for remote resources or messages.
 - Monitor the five-hour usage window. When less than 10% remains, save the precise stop point and stop all work. Resume in the same thread only after the usage window resets and wait an additional two minutes.
 
+## S-17 — Completion Task and Dependency Installation, 2026-09-28
+
+Direct developer instruction to Claude Code:
+
+- Continue implementation to the finished product under the existing requirements, specifications, architecture, roadmap and instructions, autonomously and in order; use subagents and parallel work where tasks are independent or an independent review improves quality; commit logical, verified units.
+- Work only on this PC; local services may be started. No deployment, no push, and no final real-Telegram E2E: that test is performed together with the developer.
+- Do not change product scope, acceptance criteria or fundamental architecture to pass tests; stop at a genuine developer decision gate and state the decision needed.
+- Missing dependencies such as Docker or WSL may be installed without asking. This session is not elevated; enabling Windows virtualization features and rebooting remain the developer's action.
+
 ## E-01 — Hardware Check
 
 Only hardware specifications were read using Windows CIM and `nvidia-smi`, on 2026-09-27:
