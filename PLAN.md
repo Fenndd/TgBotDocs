@@ -1,10 +1,10 @@
 # Development Plan
 
-Status: implementation authorized and active; updated 2026-09-28. T01b is calibrated and frozen on 22 reviewed cases; T02 local foundation checks are complete and T03 implementation is active. The [T02 foundation report](docs/testing/T02_FOUNDATION_REPORT.md) records verified behavior and remaining checks; [STATUS](STATUS.md) records the current phase.
+Status: implementation authorized and active; updated 2026-09-28. T01b is calibrated and frozen on 22 reviewed cases; T02's local foundation and T03's local implementation checks are verified, and T04 is active. The application/storage suite passed with actual PostgreSQL (120 tests in 17.20 seconds). See the [T03 progress report](docs/testing/T03_PROGRESS_REPORT.md), [T02 foundation report](docs/testing/T02_FOUNDATION_REPORT.md), and [STATUS](STATUS.md) for verified behavior and remaining checks.
 
 ## Current Execution Sequence
 
-1. Continue T03 through T06 in order, then T07 and T08, under the existing [roadmap](docs/planning/ROADMAP.md) and specifications. T02's local foundation is verified; T01c does not gate implementation.
+1. Continue T04–T06 in order, followed by T07 and T08, under the existing [roadmap](docs/planning/ROADMAP.md) and specifications. T02 and T03 local implementation checks are verified; T01c does not gate implementation. The [T03 progress report](docs/testing/T03_PROGRESS_REPORT.md) records the verified local results and the remaining T05/T06, Telegram, benchmark, and platform checks.
 2. Perform T07's local functional, isolation, and resilience checks as the implementation becomes available. These checks may precede final real-Telegram E2E and do not constitute recognition-quality or complete-product acceptance.
 3. Prepare T08 and perform available local packaging checks after T07's local checks. Keep native Linux results distinct; the current Windows PC does not verify that platform.
 4. After the complete product is available through Telegram, perform the final real-Telegram E2E jointly with the developer, then prepare, review, seal, and run the single 70-case integrated benchmark for both T01c and T07. The benchmark remains required acceptance; T01b freeze does not accept recognition quality. Do not schedule a second sealed run for T07.

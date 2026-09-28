@@ -1,57 +1,32 @@
 # T03 Progress and Open Verification
 
-Date: 2026-09-28. Status: implementation in progress; **T03 is not complete**.
-Recognition configuration and recognition source files remain frozen and unchanged.
-No real Telegram API request, message or benchmark run was made.
+Date: 2026-09-28. Status: T03 local implementation and compiler checks verified; T04 is active. T02's local foundation checks are complete, and T01b remains frozen. Recognition quality is not accepted. The controlled product check made no real Telegram API request or benchmark run.
 
-## Verified Partial Results
+## Implemented Locally
 
-- The RAM-only shared-password guard uses a constant-time UTF-8 comparison,
-  per-user attempt windows, lock expiry, and a global-surge alert flag without a
-  global sign-in pause. Two deterministic checks passed. Production sign-in,
-  message deletion and operator alert integration remain to be completed.
-- Instruction compilation uses the local model, interactive per-call scheduling,
-  strict mutually exclusive drafts/questions, application-assigned UUIDs/owners,
-  one contract retry, and the actual runtime's 4096-token context with a 1024-token
-  output allowance. Existing recognition prompts/policy/configuration are unchanged.
-- Owner-scoped RAM previews expire after inactivity and provide atomic creation,
-  explicit deletion confirmation, optimistic version edits, repeated-confirmation
-  idempotence, retry after storage failure, and draining of an already approved
-  database write when its caller is cancelled.
-- Compiler/preview deterministic checks: 26 passed in 1.24 seconds. Settings/access
-  checks: eight passed in 3.97 seconds. Ruff over `src tests migrations` and Git
-  whitespace checks passed. Settings is a composable dialogue module; it has not
-  yet been connected to the production Telegram actor.
-- With the actual frozen CUDA runtime, a synthetic instruction describing an
-  invoice and a certificate produced exactly two drafts with the requested text
-  fields and no validators. Both profiles were saved atomically in real PostgreSQL,
-  confirmed twice without duplicates, read back equal, and removed using explicit
-  deletion previews. The synthetic owner had zero profiles afterwards.
+- `ProductApplication` wires private-chat access, the menu, and Settings/profile dialogues through owner-scoped per-user actors. The access path covers password-message deletion, per-user lockout, a content-free global-surge alert, logout, restart/stale-update handling, and preventing document intake before sign-in.
+- Profile and Settings work is routed through each user's actor. A profile is presented for explicit human review; saving requires the user's confirmation. The local profile schema and owner isolation remain separate from recognition quality claims.
+- The instruction compiler separates three concerns: whether the instruction positively requests computing a new value; a complete audit of the requested document types, scalar fields, and list columns; and generation of a draft inventory. Reading a total or average already printed in a document is extraction, while a request to calculate a new value is unsupported. “Do not calculate” is a negative constraint, not a request for computation. Unsupported requirements must produce clarification without a partial inventory.
+- The audit inventories every requested type, field, and list column before profile compilation. The compiler's private runtime grammar constrains positional arrays with `prefixItems`, `minItems`, and `maxItems`, and omits the `items` property for compatibility with the local grammar implementation. This private output grammar does not change the public profile shape, model runtime settings, or frozen recognition core/configuration.
+- Saved drafts still require a human preview and explicit confirmation. A valid JSON response or a passing structural check is not treated as confirmation that the user requested the right extraction profile or as recognition-quality acceptance.
 
-## Confirmed Failure to Fix Before Completing T03
+## Real-Model Checks and Pending Acceptance
 
-The real-model negative check requested nested orders/line-items and an average
-calculation. The model returned one structurally valid draft and zero questions,
-silently simplifying unsupported requirements. Nothing from this check was saved.
-Its input occupied 587 tokens, so this was a semantic interpretation failure rather
-than a context overflow. T03 requires an explicit clarification/simplification
-request for unsupported nesting or calculations. Structural validation alone does
-not satisfy that requirement. Fix and verify this behavior with supported and
-unsupported real-model examples before treating the compiler as ready.
+A prior real-model negative example returned a partial profile despite unsupported nested-list/calculation requirements. The revised compiler separates calculation intent from full inventory audit. Focused probes now pass on the frozen runtime configuration hash `dd1d01a0e8ff878a60b7b4bf61b6bcb20939cd5bd5695bed4eaa79a55ea633f6`, with `environment_mismatches=[]`:
 
-## Dialogue Review and Remaining Integration
+- “Extract the printed total and average. Do not calculate values.” produced one draft and no questions; input sizes were 165, 540, and 887 tokens across compiler calls.
+- “Orders each with nested item rows” plus a request to calculate an average produced zero drafts and three clarification questions; input sizes were 164 and 539 tokens.
+- A supported two-type invoice/certificate instruction produced two drafts and no questions; its flat list retained the two requested columns (text and number), and its calendar-date validator used `%Y-%m-%d`; input sizes were 177, 552, and 924 tokens.
+- The model returned no owner, ID, or version fields; the application assigned those values and copied `original_instruction` from the user's input. These disposable compiler probes did not save profiles, and their runtime contexts were closed.
 
-The first independent Settings review identified two defects: a Cancel button
-could falsely claim that an already confirmed in-flight save changed nothing;
-terminal failures retained draft text in closed RAM sessions. Both were fixed:
-saving now waits for its result, and terminal error cleanup discards draft state.
-Regression checks cover both fixes. The independent reviewer then ran the combined
-access/compiler/profile-preview/Settings suite: **34 passed in 4.84 seconds**.
-No additional confirmed P1/P2 findings were reported in that reviewed snapshot.
+## Verified Checks and Review Corrections
 
-Complete production access/menu/profile integration, inactivity maintenance,
-logout/stale-callback handling and the Settings/document overlap rule. Follow the
-current findings and exact resumption instructions in [STATUS](../../STATUS.md).
-T04–T08 implementation, the final whole-product review, the joint real-Telegram
-test, the deferred T01c/T07 sealed benchmark, and native Linux verification remain
-pending. No recognition-quality acceptance is claimed.
+- The profiles/Settings/product/access component suite passed: **20 tests in 4.01 seconds**.
+- The combined `tests/application` and `tests/storage` suite passed against actual PostgreSQL: **120 tests in 17.20 seconds**, using the external credential flag. Ruff passed for `src`, `tests`, `migrations`, and the validation script; `git diff --check` passed.
+- `scripts/check-profile-dialogue.py` passed with controlled transport and actual PostgreSQL: two profiles were saved, one list was preserved, three unsupported-instruction questions were produced, and Telegram calls were zero. Atomic draft save/readback, repeated-confirmation idempotence, and owner-scoped explicit deletion were verified; the owner had zero profiles afterwards. The runtime exited after the check.
+- Review corrections in the current implementation include waiting for an in-flight save's actual result so Cancel cannot falsely claim that nothing changed, discarding draft text after terminal failures, keeping “Several pages” text out of compiler input, and allowing preview-send work to stop cleanly during shutdown. Regression coverage includes these cases.
+- The independent bounded compiler review reported no confirmed P1/P2 findings and passed 41 tests in 0.85 seconds. It made no edits and did not run the GPU.
+
+## Remaining Integration and Acceptance
+
+T03's local implementation gate is complete and T04 is active. Profile snapshots against document work remain for T05; the Settings/job-question overlap rules remain for T06. The joint real-Telegram end-to-end test, the single required sealed 70-case T01c/T07 benchmark, and native Linux x86-64/NVIDIA verification remain unperformed. T01b's freeze enables implementation but accepts no recognition quality; the integrated benchmark remains required acceptance after the complete product is available through Telegram and the developer can join the real-Telegram test. See [T03 specification](../../specs/T03-access-and-profiles.md), [roadmap](../planning/ROADMAP.md), and [current project status](../../STATUS.md) for scope and handoff.
