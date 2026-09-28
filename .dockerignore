@@ -6,7 +6,9 @@
 !.python-version
 !alembic.ini
 !src/
+!src/**
 !migrations/
+!migrations/**
 
 # Never send these, even if they appear inside an allowed directory:
 # environments and caches,

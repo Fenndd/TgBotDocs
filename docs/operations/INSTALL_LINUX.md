@@ -1,212 +1,188 @@
 # Linux x86-64/NVIDIA Installation (Docker Compose)
 
-Status: prepared on 2026-09-28 for T08; **nothing here has been built or run.** The Compose file and Dockerfile were written on the Windows development PC, which has no Docker daemon and no WSL. There, `docker compose config` accepted the Compose file and hadolint reported no findings in the Dockerfile. No image was built, no container ran, and no Linux or GPU behaviour has been checked. **The build cannot succeed yet:** no official llama.cpp image exists for the pinned build b11221 (see [Runtime image](#runtime-image-unresolved)). Linux remains an unchecked platform ([T08](../../specs/T08-delivery.md), ED-008). The first real run must take place on a native Linux x86-64 host with an NVIDIA GPU.
+Status: **packaging prepared; Linux delivery is not accepted**. The recipe follows [ADR-0005](../decisions/ADR-0005-runtime-supervision-and-packaging.md). Static checks run on Windows do not verify an image build, Docker Engine, Linux supervision, CUDA, or recognition quality. Native Linux x86-64/NVIDIA acceptance remains required by [T08](../../specs/T08-delivery.md) and ED-008.
 
-Packaging follows [ADR-0005](../decisions/ADR-0005-runtime-supervision-and-packaging.md). It uses two services. `app` is built on the llama.cpp CUDA server image and adds a pinned Python runtime and the application. The bot starts and supervises `llama-server` inside the container. `db` runs the official PostgreSQL image with a named volume. The operating model is described in [OPERATIONS](OPERATIONS.md), and data handling rules are in [SECURITY](../security/SECURITY.md).
+There are two services. `app` contains the bot and its supervised llama-server child; `db` contains PostgreSQL. See [OPERATIONS](OPERATIONS.md) for lifecycle and recovery and [SECURITY](../security/SECURITY.md) for data handling.
 
-## Files
+## Runtime and Application Image Gates
 
-| File | Purpose |
+The frozen runtime uses llama.cpp b11221. The registry inspection recorded on 2026-09-28 found no official CUDA server image for that build; the nearest published builds were b11206 and b11223. **No Linux runtime image has been selected or accepted.** A source build of b11221 remains a candidate, not a verified substitute.
+
+The runtime executable's configured SHA-256 must match both the actual file and the calibrated frozen artifact hash. A relocated executable with the same hash is allowed; a distinct Linux executable is refused with `runtime_executable_differs_from_frozen_recalibrate`, even if `RUNTIME_EXECUTABLE_SHA256` correctly describes that file. Copying the Windows freeze and supplying a Linux hash cannot authorize startup. Linux calibration and platform acceptance are deferred; ED-017 is a developer proposal, not permission to transfer Windows calibration. Do not change frozen identities to bypass this gate.
+
+Production requires a **verified application registry manifest digest**. None has been built or recorded. This is an explicit **unperformed required T08 item**. An image ID from `docker image inspect --format '{{.Id}}'` identifies the image configuration; it is not a registry manifest digest and cannot replace this item. An authorized release process must record the verified `RepoDigests` entry and source commit before production use. [Docker image inspect](https://docs.docker.com/reference/cli/docker/image/inspect/).
+
+The Dockerfile has no default runtime image. Export reviewed full references before each Compose session:
+
+```sh
+export TGBOTDOCS_CHECKOUT=/srv/tgbotdocs/source
+# Replace each placeholder with an actually verified registry reference.
+export LLAMA_CPP_IMAGE='<reviewed-runtime-repository>@sha256:<64-lowercase-hex-digest>'
+export TGBOTDOCS_APP_IMAGE='<reviewed-application-repository>@sha256:<64-lowercase-hex-digest>'
+unset ALLOW_UNPINNED_LLAMA_CPP_IMAGE ALLOW_LOCAL_APP_IMAGE
+sh "$TGBOTDOCS_CHECKOUT/deploy/linux/compose.sh" config --quiet
+```
+
+These placeholders deliberately fail validation. Use the supplied wrapper for every command. It requires complete SHA-256 references in production, resolves paths from its own directory, and uses an explicit public `compose.env` so an unrelated working-directory `.env` is not loaded. Production applies [compose.production.yaml](../../deploy/linux/compose.production.yaml), which removes `build` to prevent fallback source builds. Use Compose 2.24.4 or later with support for the `!reset` merge tag. [Compose merge specification](https://docs.docker.com/reference/compose-file/merge/).
+
+For local builds, Compose forwards `LLAMA_CPP_IMAGE` and `ALLOW_UNPINNED_LLAMA_CPP_IMAGE` as Docker build arguments; shell variables alone do not supply Dockerfile `ARG` values. [Compose build specification](https://docs.docker.com/reference/compose-file/build/).
+
+For a **reviewed local build experiment only**, tags under `local/` require both explicit opt-ins. Runtime and calibration gates still apply:
+
+```sh
+export LLAMA_CPP_IMAGE=local/llama.cpp:server-cuda-b11221
+export ALLOW_UNPINNED_LLAMA_CPP_IMAGE=1
+export TGBOTDOCS_APP_IMAGE=local/tgbotdocs:validation
+export ALLOW_LOCAL_APP_IMAGE=1
+sh "$TGBOTDOCS_CHECKOUT/deploy/linux/compose.sh" build app
+sh "$TGBOTDOCS_CHECKOUT/deploy/linux/compose.sh" config --quiet
+```
+
+Keep these exports for each command in that session; the wrapper validates every command. The Dockerfile also refuses an incomplete runtime digest unless the explicit local-tag opt-in is present. No local build has been performed. The wrapper is an operational guard, not an access-control boundary around Docker.
+
+Building the upstream CUDA Dockerfile at b11221 requires reviewing its source and transitive base images. Adopting b11223 changes the runtime and requires T01a lifecycle checks and applicable calibration/benchmark. Neither choice is made by this recipe.
+
+## Pinned Inputs
+
+These public digests come from the registry inspection recorded on 2026-09-28. They are provenance, not application runtime evidence. Runtime candidates are **not selected**.
+
+| Component | Recorded reference or identity |
 | --- | --- |
-| [`deploy/linux/Dockerfile`](../../deploy/linux/Dockerfile) | `app` image: llama.cpp base pinned by digest, uv 0.12.19 by digest, Python from `.python-version` (3.14.5), `uv sync --locked --no-dev`, non-root UID/GID 10001 |
-| [`deploy/linux/compose.yaml`](../../deploy/linux/compose.yaml) | `app` and `db` services, GPU reservation, mounts, networks, database secret |
-| [`deploy/linux/tgbotdocs.env.example`](../../deploy/linux/tgbotdocs.env.example) | Application configuration with container paths and no secrets |
-| [`.dockerignore`](../../.dockerignore) | Build-context allowlist: `pyproject.toml`, `uv.lock`, `.python-version`, `alembic.ini`, `src/`, `migrations/` |
+| llama.cpp b11221 | No published CUDA server image found; unresolved |
+| b11223 candidate, index | `ghcr.io/ggml-org/llama.cpp:server-cuda-b11223@sha256:5d0812fe45cb5dcb4ac5c588148a601aca63b6b224601f8d1f6f01fdfb07a111` |
+| b11206 candidate, index | `ghcr.io/ggml-org/llama.cpp:server-cuda-b11206@sha256:3e7673cce183a55f97a1bc3c80817f3c61452483c13bc088a6766388af4775fe` |
+| uv 0.12.19 | `ghcr.io/astral-sh/uv:0.12.19@sha256:04d046b13e60d6bcec73cbc5e1cad25d680dea90c8573340950a0ac2d1aef424` |
+| Python | CPython 3.14.5 from `.python-version`, installed by checksum-verifying pinned uv |
+| Dependencies | `uv.lock`, `uv sync --locked --no-dev`; build backend `hatchling==1.30.1` version-pinned only |
+| PostgreSQL 18.6, index | `postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722` |
+| Model/projector | Pinned revision and SHA-256 in [artifacts.json](../testing/evidence/t01a/artifacts.json) |
+| Production app image | **Required digest not recorded; build and release unperformed** |
 
-## Pinned Components
+The candidate b11223 image uses CUDA 12.8.1/Ubuntu 24.04 and `/app/llama-server`. The application overrides its inherited entrypoint and port-8080 health check. Any selected image must provide the executable and compatible dependencies. Dockerfile checks are not a completed build.
 
-The digests below were resolved on 2026-09-28 through the public registry HTTP APIs, using anonymous pull tokens. "Index" is the multi-platform manifest list. `docker compose` resolves it to the `linux/amd64` entry.
+## Host Requirements and Layout
 
-| Component | Reference | Digest |
+The target is native Linux x86-64 with an NVIDIA GPU, approximately 6 GiB VRAM and 16 GiB RAM, a driver compatible with the reviewed CUDA base, Docker Engine/BuildKit and Compose, and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). Host installation and GPU checks are unperformed. No WSL, daemon, driver, service, or administrator installation was performed on the development PC.
+
+Allow outbound HTTPS to Telegram during authorized operation; no inbound service ports are needed. Model downloads are a separate preparation step. Compose provides outbound connectivity; it does **not** enforce a Telegram-domain allowlist. Enforce and verify a required allowlist through host/network policy. The internal database network has no external route, and llama-server uses container loopback.
+
+Reserve space for models (about 3.4 GB), images, the database and at least 4 GiB free on the temporary filesystem: 2 GiB quota plus 2 GiB free-space reserve.
+
+| Default host path | Container destination | Access |
 | --- | --- | --- |
-| llama.cpp CUDA server b11221 | **none published** | — (placeholder; the build fails) |
-| llama.cpp `server-cuda-b11223` (nearest newer) | `ghcr.io/ggml-org/llama.cpp:server-cuda-b11223` | index `sha256:5d0812fe45cb5dcb4ac5c588148a601aca63b6b224601f8d1f6f01fdfb07a111`; amd64 `sha256:25ff2a10503093f0aa801a6776c268d996dc1ee882e533eb660d83390dec5aab` |
-| llama.cpp `server-cuda-b11206` (nearest older) | `ghcr.io/ggml-org/llama.cpp:server-cuda-b11206` | index `sha256:3e7673cce183a55f97a1bc3c80817f3c61452483c13bc088a6766388af4775fe`; amd64 `sha256:e2f285f5b208ea5940a28f1573ae4791a8735dd1c41aa0e4f4836aab211bb734` |
-| uv 0.12.19 | `ghcr.io/astral-sh/uv:0.12.19` | index `sha256:04d046b13e60d6bcec73cbc5e1cad25d680dea90c8573340950a0ac2d1aef424` |
-| Python | CPython 3.14.5 installed by uv (`.python-version`) | uv verifies its managed downloads against checksums embedded in the pinned uv release |
-| Python dependencies | `uv.lock` (`uv sync --locked --no-dev`) | Hashes in the lockfile; the build backend `hatchling==1.30.1` is pinned by version only |
-| PostgreSQL 18.6 | `postgres:18.6-trixie` (same index as `postgres:18.6`) | index `sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722`; amd64 `sha256:0377e72c5289ed2f98cf61b1a9c2db9eb9d300317fe14244492fbc94343b3d04` |
-| Model and projector | Hugging Face `Qwen/Qwen3-VL-4B-Instruct-GGUF` at revision `1cd86afb9a95c410a6038ab3b40d8b578c892266` | SHA-256 as in [artifacts.json](../testing/evidence/t01a/artifacts.json) and `recognition/runtime.py` |
+| `/srv/tgbotdocs/config/tgbotdocs.env` | `app:/config/tgbotdocs.env` | Read-only, `root:10001`, `0640` |
+| `/srv/tgbotdocs/config/db-password` | `db:/run/secrets/db_password` | Read-only application-role secret, `root:999`, `0640` |
+| `/srv/tgbotdocs/config/db-admin-password` | `db:/run/secrets/db_admin_password` | Read-only admin secret, `root:999`, `0640` |
+| `/srv/tgbotdocs/data` | `app:/data` | Read-write logs, runtime keys and lock, `10001:10001`, `0700` |
+| `/srv/tgbotdocs/temporary` | `app:/data/temporary` | Dedicated read-write job mount, `10001:10001`, `0700` |
+| `/srv/tgbotdocs/models` | `app:/data/models` | Read-only artifacts |
+| `/srv/tgbotdocs/frozen` | `app:/data/frozen` | Read-only calibrated configuration |
+| Compose `db-data` volume | `db:/var/lib/postgresql` | Persistent PostgreSQL 18 cluster |
 
-The llama.cpp images use the tag scheme `server-cuda-b<build>`, with `server-cuda12-b<build>` and `server-cuda13-b<build>` variants. In `server-cuda-b11223`, the image labels show `org.opencontainers.image.version=b11223` and revision `4da6337767f973e2b4d0797e5b323d77d8565e4a`. The image uses CUDA 12.8.1 on Ubuntu 24.04, places `/app/llama-server` as its entrypoint, requires `NVIDIA_REQUIRE_CUDA=cuda>=12.8`, sets `LLAMA_ARG_HOST=0.0.0.0`, and has a health check on port 8080. The application image overrides the health check and the entrypoint. The runtime also removes `LLAMA_*` variables from the child's environment and passes `--host 127.0.0.1`.
+Export public path overrides if required: `TGBOTDOCS_ENV_FILE`, `TGBOTDOCS_DATA_DIR`, `TGBOTDOCS_TEMP_DIR`, `TGBOTDOCS_MODELS_DIR`, `TGBOTDOCS_FROZEN_DIR`, `TGBOTDOCS_DB_PASSWORD_FILE`, `TGBOTDOCS_DB_ADMIN_PASSWORD_FILE`. Keep all host data/configuration outside the checkout. Bind mounts refuse to create missing host paths.
 
-## Runtime Image (Unresolved)
-
-The frozen recognition configuration pins llama.cpp **b11221**. Upstream publishes Docker images from a daily scheduled workflow (`.github/workflows/docker.yml`: `schedule` plus manual dispatch), not for every release. Among the 12,042 tags of `ghcr.io/ggml-org/llama.cpp`, none contains `11221`: the CUDA server images jump from b11206 to b11223. The Dockerfile's default `LLAMA_CPP_IMAGE` is therefore an uppercase placeholder, and Docker rejects it as an invalid reference before pulling anything. A base referenced without `@sha256:` is also refused unless `ALLOW_UNPINNED_LLAMA_CPP_IMAGE=1`.
-
-Choosing a base is **the developer's decision**. The options are:
-
-1. **Adopt a published image, such as `server-cuda-b11223` pinned by digest.** This counts as a llama.cpp update. ADR-0005 requires repeating the T01a runtime checks (streaming cancellation, slot release, restart, memory envelope) and, if recognition output changes, the benchmark. Note that the executable override does not check the build number. The frozen identity would still state `b11221` while the container runs b11223, so this step must not be taken silently.
-2. **Build the official CUDA Dockerfile at tag b11221 on the Linux host**, then use the local image:
-
-   ```sh
-   git clone --depth 1 --branch b11221 https://github.com/ggml-org/llama.cpp.git /srv/build/llama.cpp
-   docker build -f /srv/build/llama.cpp/.devops/cuda.Dockerfile --target server \
-     -t local/llama.cpp:server-cuda-b11221 /srv/build/llama.cpp
-   docker compose -f deploy/linux/compose.yaml build \
-     --build-arg LLAMA_CPP_IMAGE=local/llama.cpp:server-cuda-b11221 \
-     --build-arg ALLOW_UNPINNED_LLAMA_CPP_IMAGE=1 app
-   ```
-
-   This keeps the pinned source release. However, the upstream Dockerfile pulls `node:24` and `nvidia/cuda:12.8.1-*-ubuntu24.04` by tag, and the result is not bit-for-bit reproducible. The executable SHA-256 you pin in the configuration is the only integrity check of such a build (not verified).
-
-After the decision, commit the chosen reference as the Dockerfile's `LLAMA_CPP_IMAGE` default, for example `ghcr.io/ggml-org/llama.cpp:server-cuda-b11223@sha256:5d08…a111`. Then record it in STATUS, and in the decision register if it changes the pinned build.
-
-## Host Requirements
-
-- Linux x86-64 with an NVIDIA GPU. The reference class is 6 GiB VRAM and 16 GiB RAM (T08).
-- An NVIDIA driver that supports CUDA 12.8 (`nvidia-smi` shows the supported CUDA version). The image's `NVIDIA_REQUIRE_CUDA` accepts older driver branches only on data-centre products.
-- Docker Engine with BuildKit and the Compose v2 plugin, plus the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) configured for Docker. These are administrator actions on the Linux host.
-- Outbound HTTPS to the Telegram Bot API. Inbound ports are not needed.
-- Disk: 3.4 GB for the model files, room for the images (the CUDA runtime base alone takes several GB) and the database volume, plus at least 4 GiB free for the temporary area (2 GiB quota plus a 2 GiB free-space reserve, see OPERATIONS).
-
-The commands below use `LLAMA_CPP_IMAGE` for the chosen base reference, for example `export LLAMA_CPP_IMAGE=ghcr.io/ggml-org/llama.cpp:server-cuda-b11223@sha256:<index digest>`. Check GPU access from a container with that image: `docker run --rm --gpus all --entrypoint nvidia-smi "$LLAMA_CPP_IMAGE"`.
-
-## Host Layout
-
-Compose defaults to the paths below. You can change them with `TGBOTDOCS_ENV_FILE`, `TGBOTDOCS_DATA_DIR`, `TGBOTDOCS_MODELS_DIR`, `TGBOTDOCS_FROZEN_DIR`, and `TGBOTDOCS_DB_PASSWORD_FILE`, set in the shell or passed with `docker compose --env-file <file outside the checkout>`. Keep all of them outside the checkout.
-
-| Host path | Container | Mode | Contents |
-| --- | --- | --- | --- |
-| `/srv/tgbotdocs/config/tgbotdocs.env` | `app:/config/tgbotdocs.env` | read-only | Application configuration with secrets; `root:10001`, `0640` |
-| `/srv/tgbotdocs/config/db-password` | `db:/run/secrets/db_password` | Compose secret | Database password; `root:999` (the image's postgres group), `0640` |
-| `/srv/tgbotdocs/data` | `app:/data` | read-write | `DATA_ROOT`: `logs/`, `temporary/`, `runtime-temp/`, and the instance lock; `10001:10001`, `0700` |
-| `/srv/tgbotdocs/models` | `app:/data/models` | read-only | `Qwen3VL-4B-Instruct-Q4_K_M.gguf`, `mmproj-Qwen3VL-4B-Instruct-F16.gguf` |
-| `/srv/tgbotdocs/frozen` | `app:/data/frozen` | read-only | `frozen-t01b.json` |
-| volume `tgbotdocs_db-data` | `db:/var/lib/postgresql` | named volume | PostgreSQL cluster (`PGDATA=/var/lib/postgresql/18/docker`) |
-
-`/data` is a bind mount rather than a named volume. That way the operator can place the models and the frozen configuration, and read the technical log, directly on the host. The models and the frozen configuration are pinned inputs whose hashes the application verifies. Mounting them read-only keeps the application from changing them, and a compromised process cannot replace them. The database uses a named volume, as ADR-0005 specifies.
+Commands use absolute paths or the absolute `TGBOTDOCS_CHECKOUT` and work from any directory:
 
 ```sh
 sudo install -d -m 0755 /srv/tgbotdocs /srv/tgbotdocs/models /srv/tgbotdocs/frozen
 sudo install -d -m 0750 -o root -g 10001 /srv/tgbotdocs/config
-sudo install -d -m 0700 -o 10001 -g 10001 /srv/tgbotdocs/data
+sudo install -d -m 0700 -o 10001 -g 10001 /srv/tgbotdocs/data /srv/tgbotdocs/temporary
+sudo cp "$TGBOTDOCS_CHECKOUT/deploy/linux/tgbotdocs.env.example" /srv/tgbotdocs/config/tgbotdocs.env
+sudo chown root:10001 /srv/tgbotdocs/config/tgbotdocs.env
+sudo chmod 0640 /srv/tgbotdocs/config/tgbotdocs.env
+( umask 077; openssl rand -hex 32 | sudo tee /srv/tgbotdocs/config/db-password >/dev/null )
+( umask 077; openssl rand -hex 32 | sudo tee /srv/tgbotdocs/config/db-admin-password >/dev/null )
+sudo chown root:999 /srv/tgbotdocs/config/db-password /srv/tgbotdocs/config/db-admin-password
+sudo chmod 0640 /srv/tgbotdocs/config/db-password /srv/tgbotdocs/config/db-admin-password
 ```
 
-## Model Files and Frozen Configuration
+Secret-generation commands are for a new installation: do not overwrite existing passwords. Edit configuration privately. Set `BOT_TOKEN`, a random `SHARED_PASSWORD` of at least 16 characters and `DATABASE_URL` using the **application** password and user `tgbotdocs`. Hexadecimal passwords avoid URL-encoding ambiguity. Set the reviewed runtime path/hash and accepted freeze when Linux calibration becomes available. Never copy secrets into source, logs, tickets or chat.
 
-Download the files over HTTPS from the pinned revision, then verify them before first use:
+Configuration is a read-only file the app reads, not a Compose `env_file`; values do not become container environment variables. Container paths are `DATA_ROOT=/data`, `TEMPORARY_ROOT=/data/temporary` and `FROZEN_CONFIG=/data/frozen/frozen-t01b.json`. The temporary mount remains inside `DATA_ROOT` even though its host directory is separate.
+
+## Model Preparation
+
+Download pinned artifacts without changing the shell's working directory:
 
 ```sh
-cd /srv/tgbotdocs/models
-base=https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/1cd86afb9a95c410a6038ab3b40d8b578c892266
-sudo curl -fL --retry 3 -o Qwen3VL-4B-Instruct-Q4_K_M.gguf "$base/Qwen3VL-4B-Instruct-Q4_K_M.gguf"
-sudo curl -fL --retry 3 -o mmproj-Qwen3VL-4B-Instruct-F16.gguf "$base/mmproj-Qwen3VL-4B-Instruct-F16.gguf"
+model_base=https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/1cd86afb9a95c410a6038ab3b40d8b578c892266
+sudo curl -fL --retry 3 -o /srv/tgbotdocs/models/Qwen3VL-4B-Instruct-Q4_K_M.gguf "$model_base/Qwen3VL-4B-Instruct-Q4_K_M.gguf"
+sudo curl -fL --retry 3 -o /srv/tgbotdocs/models/mmproj-Qwen3VL-4B-Instruct-F16.gguf "$model_base/mmproj-Qwen3VL-4B-Instruct-F16.gguf"
 sha256sum -c <<'EOF'
-66358cb18bb6b3b1b6675aa412c7a88ef01d228f481184d13668e5201c730a0a  Qwen3VL-4B-Instruct-Q4_K_M.gguf
-256f3a43bd4205ffef48d6b92715e1e70b5b0e9aef06522584967513a9985331  mmproj-Qwen3VL-4B-Instruct-F16.gguf
+66358cb18bb6b3b1b6675aa412c7a88ef01d228f481184d13668e5201c730a0a  /srv/tgbotdocs/models/Qwen3VL-4B-Instruct-Q4_K_M.gguf
+256f3a43bd4205ffef48d6b92715e1e70b5b0e9aef06522584967513a9985331  /srv/tgbotdocs/models/mmproj-Qwen3VL-4B-Instruct-F16.gguf
 EOF
 ```
 
-Copy `frozen-t01b.json` from the calibrated data root into `/srv/tgbotdocs/frozen/` with mode `0644`. The frozen configuration binds the recognition code hash, prompt identity, dependency versions, and the Python version. Build the image from the same commit that the frozen configuration matches. Otherwise startup stops with `frozen_recognition_identity_mismatch_recalibrate`.
+Place the **accepted Linux calibration** in the frozen directory with mode `0644` when available. Code, prompts, dependency versions, Python and runtime artifacts must match it. A mismatch stops startup. The Windows freeze is not an accepted Linux calibration.
 
-## Configuration
+## Database Initialization
 
-```sh
-sudo cp deploy/linux/tgbotdocs.env.example /srv/tgbotdocs/config/tgbotdocs.env
-sudo chown root:10001 /srv/tgbotdocs/config/tgbotdocs.env && sudo chmod 0640 /srv/tgbotdocs/config/tgbotdocs.env
-( umask 077; openssl rand -hex 32 | sudo tee /srv/tgbotdocs/config/db-password >/dev/null )
-sudo chown root:999 /srv/tgbotdocs/config/db-password && sudo chmod 0640 /srv/tgbotdocs/config/db-password
-```
+The official image bootstraps `tgbotdocs_admin` with the separate admin secret. On an **empty** volume, [init-app-role.sh](../../deploy/linux/init-app-role.sh) creates `tgbotdocs` with `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION` and transfers ownership of the app database to it. This permits migrations without cluster-administration privileges. Passwords are read from files and psql environment interpolation, not command arguments. The script confines shell options and password environment to a subshell because the entrypoint may source it. [Official entrypoint](https://github.com/docker-library/postgres/blob/master/docker-entrypoint.sh), [psql variables](https://www.postgresql.org/docs/18/app-psql.html).
 
-Edit `tgbotdocs.env`:
+Initialization scripts and password files take effect only on the first start of an empty volume. Existing volumes are **not** converted from the old bootstrap-app superuser or given new passwords. Back up and plan an explicit role/password migration before upgrading an existing installation. Do not delete the volume to force initialization.
 
-- Set `BOT_TOKEN` and `SHARED_PASSWORD` (random, at least 16 characters).
-- In `DATABASE_URL`, replace the password with the content of `db-password`. Never paste either into a ticket, log, or chat.
-- Set `RUNTIME_EXECUTABLE_SHA256` as described in the next section.
+## Local Check and Authorized First Start
 
-The container paths `DATA_ROOT=/data`, `TEMPORARY_ROOT=/data/temporary`, and `FROZEN_CONFIG=/data/frozen/frozen-t01b.json` meet the configuration rules: absolute, outside the application tree (`/opt/tgbotdocs`), not under AppData, and the temporary root inside the data root. The configuration file is read by the application itself. It is not a Compose `env_file`, so its values do not become container environment variables.
-
-The database password file initializes the cluster only on the **first** start, when the volume is empty. After that, changing the file does not change the database role's password.
-
-## Pin the Runtime Executable
-
-The frozen configuration pins the Windows `llama-server.exe`. The Linux image contains a different executable, even for the same release. The application accepts it only when both `RUNTIME_EXECUTABLE` and a 64-character lowercase `RUNTIME_EXECUTABLE_SHA256` are set. Compute the hash on the Linux host from the pinned base image and from the built application image. The two values must be identical:
+These are future operator procedures, **not executed verification**. They remain blocked until runtime calibration and verified image references are available. Production uses `--no-build`; a local validation build is separate.
 
 ```sh
-docker run --rm --entrypoint sha256sum "$LLAMA_CPP_IMAGE" /app/llama-server
-docker compose -f deploy/linux/compose.yaml build app
-docker run --rm --entrypoint sha256sum tgbotdocs-app:local /app/llama-server
+sh "$TGBOTDOCS_CHECKOUT/deploy/linux/compose.sh" pull --policy always
+sh "$TGBOTDOCS_CHECKOUT/deploy/linux/compose.sh" up -d --no-build db
+sh "$TGBOTDOCS_CHECKOUT/deploy/linux/compose.sh" stop app
+sh "$TGBOTDOCS_CHECKOUT/deploy/linux/compose.sh" run --rm --no-deps --pull never app check
+# Only after check and separately authorized Telegram setup:
+sh "$TGBOTDOCS_CHECKOUT/deploy/linux/compose.sh" up -d --no-build
+sh "$TGBOTDOCS_CHECKOUT/deploy/linux/compose.sh" ps
 ```
 
-Put the hash into `RUNTIME_EXECUTABLE_SHA256`. Every change of the base image requires a new hash. The hash covers only the executable. The shared libraries next to it in `/app` (`libggml*.so`, `libllama.so`, the CUDA backend) are pinned only through the image digest.
+`check` makes no Telegram request. It cleans owned leftovers, validates configuration, applies migrations, verifies artifacts and starts/stops llama-server on the GPU. It prints `local_startup_verified` or `local_application_failed: <code>`. It uses the same instance lock as `run`; stop the app first to avoid `application_already_running`.
 
-**ED-017 caveat (proposal awaiting the developer).** At every start with this override, the application alerts `runtime_executable_differs_from_frozen`. Recognition quality on Linux has not been verified until the developer decides whether the Windows calibration and benchmark results transfer, or whether Linux needs its own verification, including a benchmark run if required. Until then, Linux results must not be reported as calibrated quality.
+`run` repeats startup checks then starts long polling. With operators configured, successful startup sends `startup_completed`. Runtime identity failure occurs before the Telegram alert target is attached: it is a technical startup failure, not a promised Telegram mismatch alert. Disable adding the bot to groups in BotFather before authorized operation.
 
-## Build, Check, First Start
+## Logs, Stop and Recovery
 
-Run from the repository root of the checkout that matches the frozen configuration:
+Technical event codes are in `/srv/tgbotdocs/data/logs/tgbotdocs.log`, with UTC daily rotation and seven retained files. Container output and PostgreSQL logs are bounded; statement and parameter logging are disabled. llama-server output is discarded. Follow [operator/privacy rules](OPERATIONS.md).
 
 ```sh
-docker compose -f deploy/linux/compose.yaml build app
-docker compose -f deploy/linux/compose.yaml up -d db
-docker compose -f deploy/linux/compose.yaml run --rm app check
-docker compose -f deploy/linux/compose.yaml up -d
-docker compose -f deploy/linux/compose.yaml ps
+sh "$TGBOTDOCS_CHECKOUT/deploy/linux/compose.sh" logs app
+sh "$TGBOTDOCS_CHECKOUT/deploy/linux/compose.sh" stop
 ```
 
-`check` makes no Telegram request. It cleans owned temporary leftovers, validates the configuration, applies the Alembic migrations, verifies the model, projector, and executable hashes, and starts and stops `llama-server` on the GPU. It prints `local_startup_verified` on success, or a content-free `local_application_failed: <code>` otherwise. `check` and the service take the same instance lock (`/data/.tgbotdocs-instance.lock`). Run `check` only while the `app` service is stopped (`docker compose ... stop app`), or it reports `application_already_running`.
+The 60-second stop grace period lets the bot stop polling, cancel jobs, close readers, clean jobs and stop its runtime. Docker kills it after the deadline; the next startup cleans owned leftovers. Linux lifecycle behavior still requires actual testing.
 
-`run`, the image's default command, performs the same startup sequence, including the migrations, and then starts long polling. `db` must be healthy first: its health check uses TCP `pg_isready`, so the temporary socket-only server of the first initialization does not count. With operators configured, the first start sends `startup_completed`, followed by `runtime_executable_differs_from_frozen` (ED-017). In BotFather, disable adding the bot to groups (T08).
+`restart: unless-stopped` retries startup failures. Persistent failures can repeat `startup_failed` operator notifications once the service error handler can send them. Stop the app while correcting configuration/calibration/image problems:
 
-## Logs
+```sh
+sh "$TGBOTDOCS_CHECKOUT/deploy/linux/compose.sh" stop app
+```
 
-- Application technical log: `/srv/tgbotdocs/data/logs/tgbotdocs.log`. It is rotated at UTC midnight and 7 files are kept. It contains event codes only (OPERATIONS, Logs).
-- Container output: `docker compose -f deploy/linux/compose.yaml logs app` shows only `tgbotdocs_starting`, `tgbotdocs_stopped`, or a failure code. `logs db` shows the PostgreSQL server log, with statement and parameter logging disabled as on Windows. Docker keeps up to 3 files of 10 MB per service.
-- `llama-server` output is discarded by the application. Operator alerts go to `OPERATOR_TELEGRAM_IDS`.
+`down` preserves the database volume; **never use `down -v`** for routine shutdown. Jobs and sign-ins do not resume.
 
-## Stop, Restart, Upgrade
-
-- Stop: `docker compose -f deploy/linux/compose.yaml stop`. The bot receives SIGTERM through the container init, stops polling, cancels jobs, removes their temporary data, and stops `llama-server`. The grace period is 60 s. After that, Docker kills the process, and the next start cleans leftovers before polling.
-- Restart after a failure is automatic (`restart: unless-stopped`). A restart does not resume document jobs or sign-ins (STATE_MACHINE).
-- `docker compose ... down` removes containers and networks but keeps the database volume. **Never use `down -v`**: it deletes the database volume.
-- Application upgrade: check out the new commit. If the recognition code, prompts, dependencies, or runtime changed, a new frozen configuration is required. Then run `docker compose ... build app`, run `check` with the service stopped, and run `up -d`. Recompute `RUNTIME_EXECUTABLE_SHA256` whenever the base image changes.
-- PostgreSQL: for a patch update within 18.x, replace the pinned digest, then run `docker compose ... pull db` and `up -d db`. A major-version upgrade needs dump/restore or `pg_upgrade` and is not covered here.
+For upgrades, select a reviewed application **manifest digest**, review migrations/calibration compatibility, stop the app, pull, check then start with `--no-build`. A changed runtime needs calibrated artifacts. PostgreSQL patch upgrades require a reviewed digest; major upgrades need planned dump/restore or `pg_upgrade`.
 
 ## Backup and Restore
 
-Back up only the database, which holds users and current profiles (DATA_MODEL). The temporary directory, logs, and models are never part of a backup. The models are re-downloadable pinned artifacts. The configuration file and the database password file are secrets. Keep their backup separately under the environment owner's protection. A dump may contain sensitive profile text, so store it restricted.
+Use [BACKUP_RESTORE](BACKUP_RESTORE.md) for the explicit three-table allowlist, private host/container archive handling and fresh-target restore/verification. Do not dump arbitrary tables or run an in-place `pg_restore --clean` against the live database. Restoring does not revive jobs or authorization. Native Linux backup/restore is unperformed; protect configuration/admin credentials separately from permitted profile backups.
 
-```sh
-sudo install -d -m 0700 -o "$(id -u)" /srv/tgbotdocs-backup
-( umask 077; docker compose -f deploy/linux/compose.yaml exec -T db \
-    pg_dump -U tgbotdocs -d tgbotdocs --format=custom \
-    > /srv/tgbotdocs-backup/tgbotdocs-$(date -u +%Y%m%dT%H%M%SZ).dump )
-```
+## Packaging Boundaries and Verification
 
-Restore into the same database while the bot is stopped:
+- `init: true` reaps children and forwards signals. The bot must not be PID 1; supervised workers use parent-death handling.
+- Temporary jobs have a **dedicated disk bind mount** inside `/data`. Disk is provisional; tmpfs needs measured RAM/swap and enough quota/reserve space. No native Linux full-quota measurement exists.
+- Models, frozen calibration and app configuration are read-only. App data/jobs are separate writable mounts. The app uses UID/GID 10001, drops all capabilities and sets `no-new-privileges`.
+- `db` joins only the internal network; `app` also joins the outbound network. No published host ports or Docker socket.
+- Migrations run on `check`/`run`; the editable installation stays beside migrations.
+- Sources: [Dockerfile](../../deploy/linux/Dockerfile), [Compose](../../deploy/linux/compose.yaml), [wrapper](../../deploy/linux/compose.sh), [public Compose env](../../deploy/linux/compose.env), [app example](../../deploy/linux/tgbotdocs.env.example), [context allowlist](../../.dockerignore).
 
-```sh
-docker compose -f deploy/linux/compose.yaml stop app
-docker compose -f deploy/linux/compose.yaml exec -T db \
-    pg_restore -U tgbotdocs -d tgbotdocs --clean --if-exists --no-owner \
-    < /srv/tgbotdocs-backup/tgbotdocs-<timestamp>.dump
-docker compose -f deploy/linux/compose.yaml start app
-```
-
-`exec` connects through the container's local socket, which the official image trusts inside the container. Restoring the database does not revive document jobs or sign-ins. Neither backup nor restore has been run on Linux.
-
-## Design Notes
-
-- **Container init.** `init: true` runs Docker's init as PID 1. It reaps processes, forwards signals, and keeps the bot from being PID 1. This matters because file-preparation workers and `llama-server` get a parent-death signal, and they exit at once if their parent is PID 1 (`application/supervision.py`). Use `--init` with a manual `docker run`.
-- **Temporary directory on disk (initial choice).** `TEMPORARY_ROOT=/data/temporary` lies on the host disk inside the data bind mount. The configuration requires it inside `DATA_ROOT`. ADR-0005 leaves the choice between disk and a tmpfs to T08, after RAM measurements. A tmpfs would keep document files off the SSD and disappear when the container stops. However, it counts against RAM and swap. Admission also requires the 2 GiB quota plus a 2 GiB free-space reserve on that filesystem, so a tmpfs would need about 4 GiB of RAM. On the 16 GiB reference class, that memory competes with `llama-server`, the bot, and PostgreSQL, and no measurement under a full quota exists yet. Disk behaves as measured on Windows and is the initial choice. The tmpfs alternative is an extra `type: tmpfs` mount at `/data/temporary` with `tmpfs.size` of at least 4 GiB and a mode that lets UID 10001 write (not verified). Swap must then be disabled or encrypted for the RAM-only property to hold.
-- **Networks.** `db` sits only on an internal network. `app` joins that network and one with outbound access for Telegram. No service publishes a port. PostgreSQL is reachable only from `app`, and `llama-server` listens on the app container's loopback with a per-start API key.
-- **GPU.** `app` reserves one NVIDIA GPU (`driver: nvidia`, `count: 1`, `capabilities: [gpu]`). `db` has no GPU.
-- **Hardening.** `app` runs as UID/GID 10001, drops all capabilities, and sets `no-new-privileges`. The database role is the cluster's bootstrap role. A separate non-superuser application role, as on the Windows development cluster, has not been added yet.
-- **Migrations** run automatically on every `check` and `run` (`ProfileStore.migrate`). For that reason the project is installed editable next to `migrations/` in `/opt/tgbotdocs`.
-
-## Verification Status
-
-| Check | Result |
+| Check | Status |
 | --- | --- |
-| `docker compose -f deploy/linux/compose.yaml config` (Docker CLI 29.8.1, Compose v5.5.1, on Windows without a daemon), with default and overridden host paths | verified: the model resolves as intended |
-| hadolint 2.15.1 on `deploy/linux/Dockerfile` | verified: no findings after the user was made numeric (DL3066) |
-| Registry tags and digests listed above | verified through the registry APIs on 2026-09-28 |
-| Image build, including the placeholder failure and the digest guard | not verified: no daemon on this PC |
-| Container start, GPU access, `check`, `run`, migrations, alerts, logs, stop behaviour, backup/restore | not verified: needs a native Linux host with an NVIDIA GPU |
-| Recognition quality on Linux | not verified: ED-017 |
+| Docker CLI/Compose parsing on Windows without engine | Static validation only; exact commands/results in current T08 report |
+| Shell syntax and reference guards on Git Bash | Static portability checks, not native Linux execution |
+| hadolint | Static lint only; exact results in current T08 report |
+| Runtime image choice and application manifest digest | **Unperformed required release items** |
+| Build, in-image interpreter/dependencies, first-volume app role/migrations | **Unperformed** |
+| Native Linux GPU, no-Telegram check, supervision/kill/cleanup, alerts/logs | **Unperformed** |
+| Stop/restart/upgrade, backup/restore, quota/RAM/tmpfs | **Unperformed** |
+| Linux calibration and recognition acceptance | **Deferred; ED-017 has no approval** |
 
-The validation tools were installed only under `C:\Users\nikit\TgBotDocsData\tools` for the user, without administrator rights or a daemon:
-
-- Compose v5.5.1 (`docker-compose-windows-x86_64.exe`) and hadolint 2.15.1 (`hadolint-windows-x86_64.exe`) matched the SHA-256 values published with their GitHub releases: `a3c0c730…d2f` and `01d92729…b0a`.
-- `download.docker.com` publishes no checksum for `docker-29.8.1.zip`. Its local SHA-256 is `f99b6e0ac1950e6c47c267b1d7ac53ef973682208523212d03477478c6562aaf`, and the executables are not Authenticode-signed.
+Tool provenance belongs in the engineering T08 report, not customer-specific filesystem paths. Static checks do not close unperformed platform/image requirements.

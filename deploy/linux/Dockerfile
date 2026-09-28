@@ -9,14 +9,11 @@
 #
 # UNRESOLVED: upstream publishes images only from a daily scheduled workflow, and
 # ghcr.io/ggml-org/llama.cpp has no image for b11221 (checked 2026-09-28; the
-# nearest are server-cuda-b11206 and server-cuda-b11223). This placeholder is not
-# a valid image reference, so every build fails here until the developer pins a
-# reviewed image, for example
-#   ghcr.io/ggml-org/llama.cpp:server-cuda-b11223@sha256:<index digest>
-# (a llama.cpp update: repeat the T01a runtime checks) or a local build of the
-# official .devops/cuda.Dockerfile at tag b11221. INSTALL_LINUX.md, "Runtime
-# Image (Unresolved)", lists the options and the recorded digests.
-ARG LLAMA_CPP_IMAGE=UNRESOLVED_NO_OFFICIAL_LLAMA_CPP_B11221_CUDA_IMAGE_SEE_DOCS_OPERATIONS_INSTALL_LINUX_MD
+# nearest are server-cuda-b11206 and server-cuda-b11223). There is no default:
+# Compose forwards the required LLAMA_CPP_IMAGE selected for review. A distinct
+# Linux executable requires its own calibration; Windows evidence does not
+# authorize it. See INSTALL_LINUX.md for the unresolved platform gate.
+ARG LLAMA_CPP_IMAGE
 # Set to 1 only for a locally built image that has no registry digest.
 ARG ALLOW_UNPINNED_LLAMA_CPP_IMAGE=
 
@@ -27,14 +24,17 @@ FROM ${LLAMA_CPP_IMAGE}
 
 ARG LLAMA_CPP_IMAGE
 ARG ALLOW_UNPINNED_LLAMA_CPP_IMAGE
+# The reviewed CUDA candidates use Ubuntu and provide bash. A custom base must
+# provide it too; pipefail keeps build validation failures visible.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Refuse a base referenced only by a movable tag, and one without the server.
 RUN set -eu; \
-    case "${LLAMA_CPP_IMAGE}" in \
-      *@sha256:*) ;; \
-      *) if [ "${ALLOW_UNPINNED_LLAMA_CPP_IMAGE}" != "1" ]; then \
-           echo "LLAMA_CPP_IMAGE must be pinned by digest" >&2; exit 1; \
-         fi ;; \
-    esac; \
+    if ! printf '%s\n' "${LLAMA_CPP_IMAGE}" | grep -Eq '^[a-z0-9][a-zA-Z0-9./:_-]*@sha256:[0-9a-f]{64}$'; then \
+      if [ "${ALLOW_UNPINNED_LLAMA_CPP_IMAGE}" != 1 ] || \
+         ! printf '%s\n' "${LLAMA_CPP_IMAGE}" | grep -Eq '^local/[a-z0-9][a-z0-9./_-]*:[A-Za-z0-9][A-Za-z0-9_.-]*$'; then \
+        echo "LLAMA_CPP_IMAGE requires a full sha256 digest (local builds need explicit opt-in)" >&2; exit 1; \
+      fi; \
+    fi; \
     test -x /app/llama-server
 
 # A fixed non-root identity; the host data directory is owned by this UID/GID.
