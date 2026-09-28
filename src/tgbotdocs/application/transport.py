@@ -36,12 +36,14 @@ class TelegramTransport:
         await self.bot.answer_callback_query(query_id, text=text)
 
     async def download(self, upload, destination):
+        from .download_sink import DownloadError
+
         if upload.size is not None and upload.size > 20 * 1024 * 1024:
-            raise ValueError("telegram_file_too_large")
+            raise DownloadError("file_too_large")
         file = await self.bot.get_file(upload.file_id)
         if not file.file_path or (file.file_size is not None and file.file_size > 20 * 1024 * 1024):
-            raise ValueError("telegram_file_unavailable")
-        await self.bot.download_file(file.file_path, destination=destination)
+            raise DownloadError("download_failed")
+        await self.bot.download_file(file.file_path, destination=destination, seek=False)
 
 
 def dispatcher(application):
