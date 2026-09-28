@@ -1,6 +1,6 @@
 # Development Plan
 
-Status: implementation authorized; updated 2026-09-28 (Claude Code continuation). T04–T06 are implemented and verified locally (complete suite with real PostgreSQL: 490 passed, 1 skipped; a local real-model product run passed). T07 local checks and T08 local preparation are next. See [STATUS](STATUS.md) and the [T06 report](docs/testing/T06_PROGRESS_REPORT.md).
+Status: implementation authorized; updated 2026-09-28 (Claude Code continuation). T04–T06 are implemented and verified locally (complete suite with real PostgreSQL: 490 passed, 1 skipped; a local real-model product run passed). T07 local checks are done ([T07 local report](docs/testing/T07_LOCAL_REPORT.md)); T08 local packaging is built and reviewed on four unmerged agent branches and must be integrated next (STATUS, Stop Point). See [STATUS](STATUS.md) and the [T06 report](docs/testing/T06_PROGRESS_REPORT.md).
 
 ## Current Execution Sequence
 

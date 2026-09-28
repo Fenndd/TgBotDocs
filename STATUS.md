@@ -4,7 +4,27 @@ Updated: 2026-09-28 (Claude Code continuation).
 
 ## Current Stage
 
-**T04–T06 are implemented and verified locally; T07 local checks and T08 local preparation are in progress.** The product runs end to end on this PC with `python -m tgbotdocs run --config <external .env>`: private sign-in, personal profiles, single file / album / Several pages intake, recognition with the frozen T01b core, profile choice or in-job instruction with preview, English delivery, cancellation, expiry, restart handling, dependency health and operator alerts. **No real Telegram request has been made**; the final real-Telegram E2E is done jointly with the developer (S-14-A5). Recognition quality is **not accepted**: the single sealed T01c/T07 benchmark is deferred until after that E2E (S-14). Native Linux verification is not possible on this PC. The frozen configuration `C:\Users\nikit\TgBotDocsData\dev\frozen\frozen-t01b.json` (SHA-256 `dd1d01a0…633f6`) still matches the checkout (`environment_mismatches` empty).
+**T04–T07 local work is implemented and verified; T08 local packaging is built and reviewed but not yet integrated (see Stop Point).** The product runs end to end on this PC with `python -m tgbotdocs run --config <external .env>`: private sign-in, personal profiles, single file / album / Several pages intake, recognition with the frozen T01b core, profile choice or in-job instruction with preview, English delivery, cancellation, expiry, restart handling, dependency health and operator alerts. **No real Telegram request has been made**; the final real-Telegram E2E is done jointly with the developer (S-14-A5). Recognition quality is **not accepted**: the single sealed T01c/T07 benchmark is deferred until after that E2E (S-14). Native Linux verification is not possible on this PC. The frozen configuration `C:\Users\nikit\TgBotDocsData\dev\frozen\frozen-t01b.json` (SHA-256 `dd1d01a0…633f6`) still matches the checkout (`environment_mismatches` empty).
+
+## Stop Point (2026-09-28, stopped at the developer's request)
+
+Work was stopped completely on the developer's instruction after finishing the running subtasks. Nothing is running: no bot, llama-server, test or agent process remains; the development PostgreSQL cluster is running on 127.0.0.1:55432 as before. Nothing was pushed.
+
+- `main` is clean at the commit that records this stop point. Verified at `dbd1f1d`: complete suite with real PostgreSQL **492 passed, 1 skipped** (156.4 s); Ruff passed.
+- Commits after the T04–T06 record: `b0fd7af` compiler descriptions come from the instruction (real-model T03 check still verified; previews now say e.g. "Applies to: Invoices"); `db2b99e` idle signed-out actors are released and remembered update IDs are bounded; `1fc5cdd` content-free `job_finished` log line per job; `dbd1f1d` T07 local resilience/leak/resource checks ([T07 local report](docs/testing/T07_LOCAL_REPORT.md)): runtime crash and database outage recovered, no leaks, peak bot 246 MiB / llama-server 3,054 MiB RSS / device GPU 4,965 MiB. A 3,000-example model-based run also passed.
+- **T07 local checks: done** (quality benchmark deferred as before).
+- **T08 local preparation: built and reviewed, NOT integrated into `main`.** Four agent branches, each with one commit on top of `61861c2`, live in locked worktrees under `.claude/worktrees/`:
+  - `worktree-wf_7df708dc-4a9-1` `3fc0a9a`: `deploy/windows/*.ps1` (scheduled task via S4U, PostgreSQL service, artifact verification; dry-run by default, nothing registered) and `docs/operations/INSTALL_WINDOWS.md`.
+  - `worktree-wf_7df708dc-4a9-2` `5c9ad5d`: `deploy/linux/Dockerfile`, `compose.yaml`, `tgbotdocs.env.example`, `.dockerignore`, `docs/operations/INSTALL_LINUX.md` (compose syntax validated with a user-level Docker CLI; nothing built or run).
+  - `worktree-wf_7df708dc-4a9-3` `7e2e509`: `docs/operations/USER_GUIDE.md`, `RUNBOOK.md`, `CONFIGURATION.md`, `THIRD_PARTY_NOTICES.md`.
+  - `worktree-wf_7df708dc-4a9-4` `e8af09b`: `scripts/backup-postgres.ps1` and `docs/operations/BACKUP_RESTORE.md` (Backup/Verify/Restore verified on the dev cluster with synthetic data).
+- The independent T08 reviews found issues that must be fixed during integration. Two are P1, both in the Windows package: Task Scheduler's restart-on-failure probably does not fire when the bot exits with a nonzero code, and the recommended layout under the drive root needs ACL hardening. The P2 issues are: the Windows task stop may not end the Python child; `.env.example` holds personal paths; the Linux compose build has no pinned image argument; the application image is not pinned by digest; a wrong alert-order claim; RUNBOOK startup-refusal and temp-root guidance; the network footprint is missing; and the backup script is hard-wired to the dev layout. The remainder is P3 wording and link work. The full agent results, checks and review findings are saved outside Git in `C:\Users\nikit\TgBotDocsData\handoff\t08-workflow-result.json`.
+
+**Resume from here:**
+
+1. Cherry-pick the four T08 commits onto `main` in this order: backup, windows, linux, docs. Fix the review findings in the handoff file. Link the new documents from OPERATIONS/README. Write the T08 report, run the full suite, and commit. Then remove the four worktrees and their branches.
+2. Final whole-product review and fixes; prepare the exact local configuration and launch instructions for the joint test.
+3. Joint real-Telegram E2E with the developer; then the deferred single sealed T01c/T07 benchmark; native Linux verification.
 
 ## Claude Code Session (2026-09-28)
 
@@ -23,11 +43,7 @@ Independent reviews used the Claude Code `opus-high` preset (three reviewers plu
 
 ## Next Steps (in order)
 
-1. **Assistant:** T07 local checks — leak checks (logs, PostgreSQL, temporary data, alerts), resilience with the real runtime and database (runtime crash during a job, database outage, restart with leftovers), memory/time measurements, and a T07 local report with verified / not verified / failed statuses.
-2. **Assistant:** T08 local preparation — Windows packaging scripts (dry-run by default; nothing registered on this PC), Linux Compose/image files (not buildable here), backup/restore of permitted PostgreSQL data, installation, user and operations guides, third-party notices, T08 report.
-3. **Assistant:** final whole-product review, fixes, and exact local configuration/launch instructions for the joint test.
-4. **Developer and assistant together:** configure the real bot token and password, disable group joining in BotFather, and run the final real-Telegram E2E.
-5. **Deferred required acceptance:** prepare, review, seal and run the single integrated T01c/T07 benchmark ([T01_PROCEDURE](docs/testing/T01_PROCEDURE.md)); native Linux x86-64/NVIDIA verification on a Linux host.
+See **Resume from here** in the Stop Point above; T07 local checks are complete.
 
 ## Open Points for the Developer
 
