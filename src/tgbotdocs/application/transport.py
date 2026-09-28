@@ -50,6 +50,8 @@ def dispatcher(application):
     @router.message()
     async def message(message, event_update):
         if message.chat.type != "private" or message.from_user is None:
+            if message.chat.type != "private" and hasattr(application, "nonprivate"):
+                application.nonprivate(message.chat.id)
             return
         owner = message.from_user.id
         common = dict(owner=owner, update_id=event_update.update_id, message_id=message.message_id,
