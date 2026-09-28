@@ -1,30 +1,27 @@
 # Work Status
 
-Updated: 2026-09-28 (Claude Code continuation).
+Updated: 2026-09-28 (Codex resume after the usage reset).
 
 ## Current Stage
 
-**T04–T07 local work is implemented and verified; T08 local packaging is built and reviewed but not yet integrated (see Stop Point).** The product runs end to end on this PC with `python -m tgbotdocs run --config <external .env>`: private sign-in, personal profiles, single file / album / Several pages intake, recognition with the frozen T01b core, profile choice or in-job instruction with preview, English delivery, cancellation, expiry, restart handling, dependency health and operator alerts. **No real Telegram request has been made**; the final real-Telegram E2E is done jointly with the developer (S-14-A5). Recognition quality is **not accepted**: the single sealed T01c/T07 benchmark is deferred until after that E2E (S-14). Native Linux verification is not possible on this PC. The frozen configuration `C:\Users\nikit\TgBotDocsData\dev\frozen\frozen-t01b.json` (SHA-256 `dd1d01a0…633f6`) still matches the checkout (`environment_mismatches` empty).
+**T04–T07 local work is implemented and verified; T08 packaging is integrated and undergoing review remediation and current verification.** The product runs end to end on this PC with `python -m tgbotdocs run --config <external .env>`: private sign-in, personal profiles, single file / album / Several pages intake, recognition with the frozen T01b core, profile choice or in-job instruction with preview, English delivery, cancellation, expiry, restart handling, dependency health and operator alerts. **No real Telegram request has been made**; the final real-Telegram E2E is done jointly with the developer (S-14-A5). Recognition quality is **not accepted**: the single sealed T01c/T07 benchmark is deferred until after that E2E (S-14). Native Linux verification is not possible on this PC. The frozen configuration `C:\Users\nikit\TgBotDocsData\dev\frozen\frozen-t01b.json` (SHA-256 `dd1d01a0…633f6`) still matches the checkout (`environment_mismatches` empty).
 
-## Stop Point (2026-09-28, stopped at the developer's request)
+## Stop Point (2026-09-28, work resumed)
 
-Work was stopped completely on the developer's instruction after finishing the running subtasks. Nothing is running: no bot, llama-server, test or agent process remains; the development PostgreSQL cluster is running on 127.0.0.1:55432 as before. Nothing was pushed.
+The 09:54 UTC heartbeat resumed work after the usage reset. The checkout was inspected before changes: Claude Code had completed T04–T07 and left `main` clean at `575dfc2`. Those results are preserved. Development PostgreSQL remains on `127.0.0.1:55432`. No push, deployment, or real Telegram request is authorized in this continuation.
 
-- `main` is clean at the commit that records this stop point. Verified at `dbd1f1d`: complete suite with real PostgreSQL **492 passed, 1 skipped** (156.4 s); Ruff passed.
-- Commits after the T04–T06 record: `b0fd7af` compiler descriptions come from the instruction (real-model T03 check still verified; previews now say e.g. "Applies to: Invoices"); `db2b99e` idle signed-out actors are released and remembered update IDs are bounded; `1fc5cdd` content-free `job_finished` log line per job; `dbd1f1d` T07 local resilience/leak/resource checks ([T07 local report](docs/testing/T07_LOCAL_REPORT.md)): runtime crash and database outage recovered, no leaks, peak bot 246 MiB / llama-server 3,054 MiB RSS / device GPU 4,965 MiB. A 3,000-example model-based run also passed.
-- **T07 local checks: done** (quality benchmark deferred as before).
-- **T08 local preparation: built and reviewed, NOT integrated into `main`.** Four agent branches, each with one commit on top of `61861c2`, live in locked worktrees under `.claude/worktrees/`:
-  - `worktree-wf_7df708dc-4a9-1` `3fc0a9a`: `deploy/windows/*.ps1` (scheduled task via S4U, PostgreSQL service, artifact verification; dry-run by default, nothing registered) and `docs/operations/INSTALL_WINDOWS.md`.
-  - `worktree-wf_7df708dc-4a9-2` `5c9ad5d`: `deploy/linux/Dockerfile`, `compose.yaml`, `tgbotdocs.env.example`, `.dockerignore`, `docs/operations/INSTALL_LINUX.md` (compose syntax validated with a user-level Docker CLI; nothing built or run).
-  - `worktree-wf_7df708dc-4a9-3` `7e2e509`: `docs/operations/USER_GUIDE.md`, `RUNBOOK.md`, `CONFIGURATION.md`, `THIRD_PARTY_NOTICES.md`.
-  - `worktree-wf_7df708dc-4a9-4` `e8af09b`: `scripts/backup-postgres.ps1` and `docs/operations/BACKUP_RESTORE.md` (Backup/Verify/Restore verified on the dev cluster with synthetic data).
-- The independent T08 reviews found issues that must be fixed during integration. Two are P1, both in the Windows package: Task Scheduler's restart-on-failure probably does not fire when the bot exits with a nonzero code, and the recommended layout under the drive root needs ACL hardening. The P2 issues are: the Windows task stop may not end the Python child; `.env.example` holds personal paths; the Linux compose build has no pinned image argument; the application image is not pinned by digest; a wrong alert-order claim; RUNBOOK startup-refusal and temp-root guidance; the network footprint is missing; and the backup script is hard-wired to the dev layout. The remainder is P3 wording and link work. The full agent results, checks and review findings are saved outside Git in `C:\Users\nikit\TgBotDocsData\handoff\t08-workflow-result.json`.
+- The four prepared T08 commits are now integrated as `ac2759c` (backup), `375326e` (Windows), `7b57496` (Linux), and `6119286` (operator/user documentation). Their source worktrees and branches are preserved; no unfinished work was removed.
+- The last complete suite recorded by the preceding session is **492 passed, 1 skipped** with real PostgreSQL; Ruff passed. Current modified-source verification is pending and will replace this checkpoint after execution.
+- Active work: generalize and verify backup/restore against scratch databases; fix pinned Linux build inputs, non-superuser database role and dedicated temporary mount; correct the runbook; implement explicit application retry inside the task's Python process, Windows directory permissions and neutral example paths. Different runtime executable hashes must be refused without a new calibration; ED-017 is still an unapproved proposal.
+- The content-free T08 review handoff is outside Git at `C:\Users\nikit\TgBotDocsData\handoff\t08-workflow-result.json`.
+- Usage guard: at the latest check, the five-hour window is 24% used. Reset is approximately **2026-09-28 14:54:33 UTC / 16:54:33 Europe/Bratislava**. The existing same-thread heartbeat is armed for reset plus two minutes; re-check/re-arm against the latest reset if stopping below 10% remaining. Do not use reset credits.
 
-**Resume from here:**
+**Resume from here if interrupted:**
 
-1. Cherry-pick the four T08 commits onto `main` in this order: backup, windows, linux, docs. Fix the review findings in the handoff file. Link the new documents from OPERATIONS/README. Write the T08 report, run the full suite, and commit. Then remove the four worktrees and their branches.
-2. Final whole-product review and fixes; prepare the exact local configuration and launch instructions for the joint test.
-3. Joint real-Telegram E2E with the developer; then the deferred single sealed T01c/T07 benchmark; native Linux verification.
+1. Inspect `git diff` and agent ownership before editing. Complete T08 review fixes, run focused checks, and commit verified components separately. Keep frozen recognition files and dependencies unchanged.
+2. Perform an independent whole-product review, fix confirmed findings, rerun affected checks and the full suite. Refresh the controlled real-model/local-PostgreSQL product check without Telegram network calls.
+3. Prepare the external local configuration and exact joint-test launch instructions; write T08 evidence and link the new documents.
+4. Joint real-Telegram E2E with the developer, then the deferred single sealed T01c/T07 benchmark. Native Linux verification remains unperformed. Developer-only decisions are recorded and deferred while the developer is absent.
 
 ## Claude Code Session (2026-09-28)
 
@@ -47,7 +44,7 @@ See **Resume from here** in the Stop Point above; T07 local checks are complete.
 
 ## Open Points for the Developer
 
-- **Linux runtime executable.** The frozen configuration pins the Windows `llama-server.exe` of build b11221. The Linux image necessarily contains a different executable of the same build. The application accepts it only through an explicit `RUNTIME_EXECUTABLE` plus pinned `RUNTIME_EXECUTABLE_SHA256` and alerts at startup that it is not the calibrated executable. Whether the Windows calibration and benchmark transfer to Linux, or Linux needs its own benchmark run, is the developer's decision (proposal ED-017).
+- **Linux runtime executable.** The frozen configuration pins the Windows `llama-server.exe` of build b11221. The Linux image necessarily contains a different executable of the same build. A different executable hash is refused until new calibration is available. The platform calibration/acceptance procedure remains a developer decision (proposal ED-017); no transfer of Windows recognition acceptance is implied.
 - **WSL2/Docker on this PC.** Both require administrator rights, enabling Windows virtualization features and a reboot; this session is not elevated and does not change system settings. Under ED-008 WSL2 would only provide an early smoke test; final Linux verification needs a native Linux host.
 - **Compiler description placeholder.** In the real run the instruction compiler once copied the example description "Applicable documents" into a draft; the preview shows it and the user can edit it. A prompt improvement needs its own real-model check.
 

@@ -1,6 +1,6 @@
 # Development Plan
 
-Status: implementation authorized; updated 2026-09-28 (Claude Code continuation). T04–T06 are implemented and verified locally (complete suite with real PostgreSQL: 490 passed, 1 skipped; a local real-model product run passed). T07 local checks are done ([T07 local report](docs/testing/T07_LOCAL_REPORT.md)); T08 local packaging is built and reviewed on four unmerged agent branches and must be integrated next (STATUS, Stop Point). See [STATUS](STATUS.md) and the [T06 report](docs/testing/T06_PROGRESS_REPORT.md).
+Status: implementation authorized; updated 2026-09-28 (Codex resume). T02–T07 local implementation/checks are recorded in [STATUS](STATUS.md). Prepared T08 commits have been integrated; backup, Windows/Linux packaging and documentation review findings are being corrected and verified. The last complete suite was 492 passed, 1 skipped; current-source full verification and independent whole-product review follow the fixes.
 
 ## Current Execution Sequence
 
@@ -10,7 +10,7 @@ Status: implementation authorized; updated 2026-09-28 (Claude Code continuation)
 4. After the complete product is available through Telegram, perform the final real-Telegram E2E jointly with the developer, then prepare, review, seal, and run the single 70-case integrated benchmark for both T01c and T07. The benchmark remains required acceptance; T01b freeze does not accept recognition quality. Do not schedule a second sealed run for T07.
 5. Remote deployment remains deferred. Follow the benchmark ledger and record unperformed checks honestly.
 
-While the developer is absent, continue independent work and defer developer-only decisions (S-16, S-17). Make small logical changes and verify each unit before committing. The S-16 usage guard applied to the Codex session.
+While the developer is absent, continue independent work and defer developer-only decisions (S-16, S-17). Make small logical changes and verify each unit before committing. The S-16 usage guard applies to this resumed Codex session; save the precise stop point and stop completely below 10% remaining, then resume in this same thread after reset plus two minutes.
 
 The rest of this file records the completed planning package. Its old session exclusions do not override the current development authorization.
 

@@ -172,3 +172,21 @@ async def serve(source):
         EVENTS.error("%s", "service_failed" if started else "startup_failed")
         await _notify_failure(source, "service_failed" if started else "startup_failed")
         raise
+
+
+async def supervised_serve(source, *, retry_s=60.0):
+    """Retry after resource cleanup, within the process owned by the service manager.
+
+    A normal shutdown or cancellation ends supervision. Dependency failures already
+    produce the fixed technical alert in ``serve``; no exception text is logged here.
+    """
+    while True:
+        try:
+            await serve(source)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            EVENTS.warning("service_retry_scheduled")
+            await asyncio.sleep(retry_s)
+        else:
+            return

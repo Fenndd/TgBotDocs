@@ -22,15 +22,19 @@ def main():
     parser = argparse.ArgumentParser(prog="tgbotdocs")
     parser.add_argument("action", choices=("check", "run"))
     parser.add_argument("--config", type=Path, default=None)
+    parser.add_argument("--restart-on-failure", action="store_true",
+                        help="retry a failed run after 60 seconds; for a local service manager")
     args = parser.parse_args()
+    if args.restart_on_failure and args.action != "run":
+        parser.error("--restart-on-failure is only valid with run")
     source = args.config or Path(os.environ.get("TGBOTDOCS_CONFIG", ""))
     try:
         if args.action == "run":
-            from .application.service import configure_logging, serve
+            from .application.service import configure_logging, serve, supervised_serve
 
             configure_logging(source)
             print("tgbotdocs_starting", flush=True)
-            asyncio.run(serve(source))
+            asyncio.run(supervised_serve(source) if args.restart_on_failure else serve(source))
             print("tgbotdocs_stopped", flush=True)
         else:
             print(asyncio.run(check_configuration(source)))

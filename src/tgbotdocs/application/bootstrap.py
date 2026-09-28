@@ -60,6 +60,17 @@ def prepare_runtime_temp(root):
     return directory
 
 
+def configured_runtime_files(cfg, frozen):
+    """Allow relocation of the calibrated executable, never a different binary."""
+    files = runtime_files(cfg.data_root)
+    if cfg.runtime_executable is not None:
+        if cfg.runtime_executable_sha256 != frozen.runtime_artifacts.executable_sha256:
+            raise ConfigurationError("runtime_executable_differs_from_frozen_recalibrate")
+        files = replace(files, executable=cfg.runtime_executable,
+                        executable_sha256=cfg.runtime_executable_sha256)
+    return files
+
+
 @asynccontextmanager
 async def resources(source: Path, *, alert=None):
     temporary = startup_temporary_root(source)
@@ -80,6 +91,7 @@ async def _resources(source, temporary, *, alert=None):
         raise ConfigurationError("frozen_recognition_identity_mismatch_recalibrate")
     if cfg.processing_s != frozen.core.processing_budget_s:
         raise ConfigurationError("processing_budget_differs_from_frozen_configuration")
+    files = configured_runtime_files(cfg, frozen)
     # Runtime keys belong to this explicit data root, never an app's redirected
     # default TEMP directory. Recognition scratch always uses owned job areas.
     previous_temp = tempfile.tempdir
@@ -93,15 +105,6 @@ async def _resources(source, temporary, *, alert=None):
             stack.push_async_callback(storage.close)
             await storage.migrate()
             await storage.health()
-            files = runtime_files(cfg.data_root)
-            if cfg.runtime_executable is not None:
-                # Another platform's build of the pinned release, verified by its own
-                # pinned hash. It is not the calibrated executable: that platform needs
-                # its own verification (T08), and the operator is told so.
-                files = replace(files, executable=cfg.runtime_executable,
-                                executable_sha256=cfg.runtime_executable_sha256)
-                if alert is not None:
-                    await alert("runtime_executable_differs_from_frozen")
             runtime = LocalRuntime(files, frozen.runtime_profile.profile(), port=cfg.runtime_port)
             await stack.enter_async_context(runtime)
             adapter = ModelAdapter(runtime.adapter_settings, restart=runtime.restart)
