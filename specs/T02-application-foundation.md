@@ -1,6 +1,6 @@
 # T02 — Application Foundation and Local Execution
 
-Status: implementation active after the T01b freeze. T01b was calibrated and frozen on 2026-09-28; see the [calibration report](../docs/testing/T01B_CALIBRATION_REPORT.md). The T01c benchmark remains deferred and required; the freeze does not accept recognition quality.
+Status: local implementation and foundation checks are complete on Windows; see the [T02 foundation report](../docs/testing/T02_FOUNDATION_REPORT.md). The real-Telegram walking skeleton and native Linux verification remain unperformed. T01b was calibrated and frozen on 2026-09-28 (see the [calibration report](../docs/testing/T01B_CALIBRATION_REPORT.md)); the T01c benchmark remains deferred and required, and the freeze does not accept recognition quality.
 
 ## Goal and Basis
 

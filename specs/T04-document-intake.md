@@ -1,6 +1,6 @@
 # T04 — Document Intake and Preparation
 
-Status: specification ready; execution after T02/T03. Date: 2026-09-27; revised after the independent review (Telegram photo path, admission control, album limits, lazy rendering). Implementation and environment are not created in the planning session.
+Status: the resource layer and collection actor are implemented and verified locally with controlled Telegram substitutes; see the [T04 progress report](../docs/testing/T04_PROGRESS_REPORT.md). No real Telegram request or sealed benchmark was performed; Telegram delivery-path verification remains part of the joint E2E. T02/T03 are locally checked; recognition quality remains unaccepted pending the deferred shared T01c/T07 benchmark. Updated: 2026-09-28; specification revised after the independent review (Telegram photo path, admission control, album limits, lazy rendering).
 
 ## Goal and Basis
 

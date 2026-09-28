@@ -1,6 +1,6 @@
 # Development Roadmap
 
-Status: sequence defined based on agreed decisions; revised on 2026-09-27 after the independent review. Calendar estimates are not invented before the first measured result.
+Status: updated 2026-09-28. T01b is frozen, T02–T07 local implementation/checks passed, and available T08 packaging is prepared for the developer's joint Telegram test. [The local T08 report](../testing/T08_LOCAL_REPORT.md) records independent review, actual checks and unperformed platform acceptance. Recognition quality remains unaccepted; no real Telegram request or native Linux verification was performed.
 
 ## Stages and Transition Conditions
 
@@ -21,4 +21,4 @@ The current PC is the development environment and the reference hardware class f
 
 ## Change Rule
 
-Failure to meet quality/resource criteria, the need for external AI or stronger hardware, or new persistent storage is returned to the developer with measurements and options. Requirements must not be silently changed or a stage declared successful. Code, installation, and infrastructure are outside the current planning session.
+Failure to meet quality/resource criteria, the need for external AI or stronger hardware, or new persistent storage is returned to the developer with measurements and options. Requirements must not be silently changed or a stage declared successful. The original planning-only exclusion of implementation is historical; current authorized local development does not authorize external publication or deployment.

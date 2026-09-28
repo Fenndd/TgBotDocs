@@ -1,6 +1,6 @@
 # T07 — Acceptance of Quality, Isolation, and Resilience
 
-Status: local T07 implementation and resilience checks may proceed after T02–T06; full acceptance remains pending. T01c and T07 share one sealed integrated 70-case quality run, deferred until the complete product is available through Telegram and the final real-Telegram E2E can be done with the developer. Date: 2026-09-28; existing criteria remain unchanged.
+Status: T07 local implementation and functional, isolation, cleanup, and resilience checks are complete; see the [T07 local report](../docs/testing/T07_LOCAL_REPORT.md). All Telegram interactions in those checks used a controlled substitute, with zero real Telegram requests. Full acceptance remains pending: T01c and T07 share one required sealed integrated 70-case quality run, deferred until the complete product is available through Telegram and the final real-Telegram E2E can be done jointly with the developer. Recognition quality is not accepted. Date: 2026-09-28; existing criteria remain unchanged.
 
 ## Goal and Basis
 

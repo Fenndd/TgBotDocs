@@ -1,6 +1,6 @@
 # Development Tasks
 
-Specifications are prepared based on the agreed requirements and were revised on 2026-09-27 after the independent review. T01b is calibrated and frozen; T02–T08 proceed in order. T01c benchmark preparation and the one sealed integrated run shared with T07 are deferred until the complete product is available through Telegram and the final real-Telegram E2E can be done with the developer. Dependencies below mean the results of previous tasks, not merely the existence of their documents.
+Specifications are based on the agreed requirements and were revised on 2026-09-27 after the independent review. T01b is calibrated and frozen. T02–T07 local implementation and checks are complete; see each task's status and linked progress report. T01c acceptance remains required but deferred: it shares one sealed integrated 70-case benchmark with T07 after the complete product is available through Telegram and the final real-Telegram E2E can be performed jointly with the developer. That benchmark has not been run, recognition quality is not accepted, and native Linux verification remains unperformed. Dependencies below mean the results of previous tasks, not merely the existence of their documents.
 
 | Task | Result | Dependencies |
 | --- | --- | --- |

@@ -1,6 +1,6 @@
 # T08 — Reproducible Delivery to the Customer
 
-Status: local T08 preparation and platform checks may proceed after T07's local checks; full handoff acceptance remains pending. The final real-Telegram E2E and the one integrated sealed benchmark shared by T01c/T07 must be completed with the developer, and native Linux verification remains required. Updated 2026-09-28. External hosting, server creation, and environment setup are not performed now.
+Status: available local T08 packaging and instructions are prepared for the developer's joint Telegram test; actual evidence and limits are in the [local report](../docs/testing/T08_LOCAL_REPORT.md). Full handoff acceptance remains pending. The final real-Telegram E2E, one integrated sealed benchmark shared by T01c/T07, clean-machine Windows checks and native Linux verification remain required. Updated 2026-09-28. No real Telegram request, external delivery or deployment was performed; native Linux verification was not performed.
 
 ## Goal and Basis
 

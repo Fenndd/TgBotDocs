@@ -1,6 +1,6 @@
 # T05 — Local Profile Matching and Extraction
 
-Status: specification ready; execution after frozen T01b, T03, and T04. Date: 2026-09-27; revised after the independent review (recognition core from T01b, matching view, batch merging, verification layer). T01c quality acceptance remains pending but does not gate implementation.
+Status: the recognition integration is implemented and checked locally with scripted model substitutes and in the product; see the [T05 progress report](../docs/testing/T05_PROGRESS_REPORT.md) and its linked [T06 real-model product run](../docs/testing/T06_PROGRESS_REPORT.md). Recognition quality remains unaccepted: the required shared sealed T01c/T07 benchmark is deferred. T01b remains frozen and T01c acceptance does not gate local implementation. Updated: 2026-09-28; specification revised after the independent review (recognition core from T01b, matching view, batch merging, verification layer).
 
 ## Goal and Basis
 

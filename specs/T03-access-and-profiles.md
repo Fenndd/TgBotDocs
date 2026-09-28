@@ -1,6 +1,6 @@
 # T03 — Access and Personal Extraction Profiles
 
-Status: specification ready; execution after T02. Date: 2026-09-27; revised after the independent review (multi-type instructions, optimistic versions, Settings during an active job, access hardening). Code and environment are not created in the planning session.
+Status: local implementation and access, profile, Settings, and compiler checks are complete; see the [T03 progress report](../docs/testing/T03_PROGRESS_REPORT.md). The controlled product check made no real Telegram request. T02 foundation checks are complete, T01b remains frozen, and recognition quality remains unaccepted pending the deferred shared T01c/T07 benchmark. Updated: 2026-09-28; specification revised after the independent review (multi-type instructions, optimistic versions, Settings during an active job, access hardening).
 
 ## Goal and Basis
 

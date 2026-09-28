@@ -1,6 +1,6 @@
 # T06 — Telegram Flows, Queue, and Task Completion
 
-Status: specification ready; execution after T02–T05. Date: 2026-09-27; revised after the independent review (state machine, scheduler priorities, admission, stale updates, rendering, operator alerts). No implementation is created in the planning session.
+Status: implementation and local checks are complete with controlled Telegram substitutes; one functional product run used the frozen model and real PostgreSQL. No real Telegram request was made; the joint real-Telegram E2E remains pending. See the [T06 progress report](../docs/testing/T06_PROGRESS_REPORT.md). Recognition quality remains unaccepted pending the deferred shared sealed T01c/T07 benchmark; the frozen recognition source and configuration are unchanged. Updated: 2026-09-28; specification revised after the independent review (state machine, scheduler priorities, admission, stale updates, rendering, operator alerts).
 
 ## Goal and Basis
 
